@@ -1,19 +1,24 @@
-
 use tokio::{io::AsyncReadExt, net::TcpStream};
-
-/// block server 2 compute server
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct FileReadyInfo {
-    pub id: String,
-    pub channel_range: String, // "0-1023". "0-1023,2048-3071". left closed, right opened
-}
 
 /// instrument 2 block server
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct InstrumentControlInfo {
+pub struct ControlInfo {
     // instrument 2 block server
-    pub command: String, // "stop", "resume", "data"
+    pub command: String, // "stop", "resume", "data_ready" "served_files"
     pub fpath: Option<String>,
+    pub start_channel: Option<u32>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ControlResponse {
+    pub status: String, // "ok", "error"
+    pub message: Option<String>,
+}
+
+impl ControlResponse {
+    pub fn new(status: String, message: Option<String>) -> Self {
+        ControlResponse { status, message }
+    }
 }
 
 /// control message. 4bytes for length, and following the json bytes

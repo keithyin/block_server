@@ -1,82 +1,107 @@
-use std::io;
+use std::{
+    io,
+    sync::{Arc, Mutex, OnceLock, atomic::AtomicBool},
+};
 
-use block_server::net::{FileReadyInfo, InstrumentControlInfo};
+use block_server::net::{ControlInfo, ControlResponse, extract_control_info};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
 
+static READ_FLAG: AtomicBool = AtomicBool::new(true);
+static SERVED_FILES: OnceLock<Arc<Mutex<Vec<String>>>> = OnceLock::new();
 
-async fn notify_compute_server(file_ready_info: &FileReadyInfo) -> io::Result<()> {
-    let src = serde_json::to_vec(file_ready_info).unwrap();
-    
+async fn control_msg_listener() -> anyhow::Result<()> {
+    let listener = TcpListener::bind("0.0.0.0:30001").await?;
+
+    loop {
+        let (socket, _) = listener.accept().await?;
+        tokio::spawn(async move {
+            control_msg_processor(socket).await;
+        });
+    }
     Ok(())
 }
 
-async fn block_request_listener() -> io::Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:30001").await?;
+async fn control_msg_processor(socket: TcpStream) -> anyhow::Result<()> {
+    let mut socket = socket;
 
-    loop {
-        let (socket, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            block_request_processor(socket).await;
-        });
-    }
-}
+    let control_info = extract_control_info::<ControlInfo>(&mut socket).await?;
 
-async fn block_request_processor(socket: TcpStream) {
-    // open the file, and prepare to send data back
-    loop {
-        // wait the request from compute server
-
-        // send the result
-
-        // if the job is done, break
-    }
-}
-
-async fn instrument_message_listener() -> io::Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:30001").await?;
-
-    loop {
-        let (socket, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            // instrument_message_processor(socket).await;
-        });
-    }
-}
-
-async fn instrument_message_processor(mut socket: TcpStream, compute_server_ip: &str) -> io::Result<()> {
-    let mut len_buf = [0u8; 4];
-    let _ = socket.read_exact(&mut len_buf).await?;
-    let msg_len = u32::from_be_bytes(len_buf) as usize;
-    let mut msg_buf = vec![0u8; msg_len];
-    socket.read_exact(&mut msg_buf).await?;
-
-    let msg: InstrumentControlInfo = serde_json::from_slice(&msg_buf).unwrap();
-    match msg.command.as_str() {
+    match control_info.command.as_str() {
         "stop" => {
-            // stop the file transfer server
+            READ_FLAG.store(false, std::sync::atomic::Ordering::Relaxed);
         }
         "resume" => {
-            // resume the file transfer server
+            READ_FLAG.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        "data" => {
-            let fpath = msg.fpath.unwrap();
-            notify_compute_server(&FileReadyInfo {
-                id: "unique_file_id".to_string(),
-                channel_range: "0-1024".to_string(),
-            }).await?;
+        "data_ready" => {}
+        "served_files" => {}
+        _ => {
+            let resp_msg =
+                ControlResponse::new("error".to_string(), Some("Unknown command".to_string()));
+            let resp_bytes = serde_json::to_vec(&resp_msg).unwrap();
+            socket
+                .write_all(&(resp_bytes.len() as u32).to_be_bytes())
+                .await?;
+            socket.write_all(&resp_bytes).await?;
+            return Ok(());
+        }
+    }
+    let resp_msg = ControlResponse::new("ok".to_string(), None);
+    let resp_bytes = serde_json::to_vec(&resp_msg).unwrap();
+    socket
+        .write_all(&(resp_bytes.len() as u32).to_be_bytes())
+        .await?;
+    socket.write_all(&resp_bytes).await?;
+    Ok(())
+}
 
-            // process the data file
+async fn data_msg_listener() -> anyhow::Result<()> {
+    let listener = TcpListener::bind("0.0.0.0:30002").await?;
+    loop {
+        match listener.accept().await {
+            Ok((socket, _)) => {
+                tokio::spawn(async move {
+                    let _ = data_msg_processor(socket).await;
+                });
+            }
+            Err(e) => {
+                eprintln!("Failed to accept connection: {}", e);
+            }
         }
-        _ => {}
+    }
+}
+
+async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
+    let control_msg = extract_control_info::<ControlInfo>(&mut socket).await?;
+
+    let mut f = tokio::fs::File::open(control_msg.fpath.as_ref().unwrap()).await?;
+
+    let mut buf: Vec<u8> = Vec::with_capacity(1024);
+    loop {
+        buf.clear();
+        let size = f.read_buf(&mut buf).await?;
+        if size == 0 {
+            break;
+        }
+        socket.write_all(&buf[..size]).await?;
+
+        // TODO receive the ack from compute server
     }
 
     Ok(())
 }
+fn main() -> io::Result<()> {
+    SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
-#[tokio::main]
-async fn main() -> io::Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .build()?;
+
+    rt.block_on(async {
+        let _ = tokio::join!(control_msg_listener(), data_msg_listener());
+    });
     Ok(())
 }
