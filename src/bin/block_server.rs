@@ -21,7 +21,6 @@ async fn control_msg_listener() -> anyhow::Result<()> {
             let _ = control_msg_processor(socket).await;
         });
     }
-    Ok(())
 }
 
 async fn control_msg_processor(socket: TcpStream) -> anyhow::Result<()> {
@@ -36,25 +35,43 @@ async fn control_msg_processor(socket: TcpStream) -> anyhow::Result<()> {
         "resume" => {
             READ_FLAG.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        "data_ready" => {}
-        "served_files" => {}
+        "file_ready" => {
+            let fpath = control_info.fpath.unwrap();
+            let mut served_files = SERVED_FILES.get().unwrap().lock().unwrap();
+            served_files.push(fpath);
+        }
+        "serving_files" => {}
         _ => {
-            let resp_msg =
-                ControlResponse::new("error".to_string(), Some("Unknown command".to_string()));
+            tracing::warn!("Unknown command received: {:?}", control_info);
+        }
+    }
+
+    match control_info.command.as_str() {
+        "stop" | "resume" | "file_ready" => {
+            let resp_msg = ControlResponse::new("ok".to_string(), None);
             let resp_bytes = serde_json::to_vec(&resp_msg).unwrap();
             socket
                 .write_all(&(resp_bytes.len() as u32).to_be_bytes())
                 .await?;
             socket.write_all(&resp_bytes).await?;
-            return Ok(());
+        }
+
+        "serving_files" => {
+            let resp_msg = {
+                let served_files = SERVED_FILES.get().unwrap().lock().unwrap();
+                block_server::net::ServedFilesResp::new("ok".to_string(), served_files.clone())
+            };
+            let resp_bytes = serde_json::to_vec(&resp_msg).unwrap();
+            socket
+                .write_all(&(resp_bytes.len() as u32).to_be_bytes())
+                .await?;
+            socket.write_all(&resp_bytes).await?;
+        }
+        _ => {
+            // tracing::warn!("Unknown command received: {:?}", control_info);
         }
     }
-    let resp_msg = ControlResponse::new("ok".to_string(), None);
-    let resp_bytes = serde_json::to_vec(&resp_msg).unwrap();
-    socket
-        .write_all(&(resp_bytes.len() as u32).to_be_bytes())
-        .await?;
-    socket.write_all(&resp_bytes).await?;
+
     Ok(())
 }
 
@@ -94,6 +111,8 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     Ok(())
 }
 fn main() -> io::Result<()> {
+    tracing_subscriber::fmt::init();
+
     SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
