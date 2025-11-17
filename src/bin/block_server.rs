@@ -18,7 +18,7 @@ async fn control_msg_listener() -> anyhow::Result<()> {
     loop {
         let (socket, _) = listener.accept().await?;
         tokio::spawn(async move {
-            control_msg_processor(socket).await;
+            let _ = control_msg_processor(socket).await;
         });
     }
     Ok(())
