@@ -2,6 +2,9 @@
 name = "block_server"
 version = "0.1.0"
 edition = "2024"
+description = "minimap2 frontend"
+license = "MIT"
+repository ="https://github.com/keithyin/block_server"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
