@@ -107,10 +107,13 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         buf.clear();
         let size = f.read_buf(&mut buf).await.context("read file error")?;
         if size == 0 {
-            tracing::info!("file send down");
+            tracing::info!("file send done");
             break;
         }
         socket.write_all(&buf[..size]).await.context("write socket error")?;
+
+        let mut resp_bytes = [0_u8; 1];
+        socket.read_exact(&mut resp_bytes).await.context("wait response error")?;
 
         // TODO receive the ack from compute server
     }

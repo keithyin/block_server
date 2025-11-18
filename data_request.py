@@ -29,7 +29,9 @@ def tcp_client():
         tot_recv = 0
         tt = 0
         while True:
+            
             response = client_socket.recv(1024)
+            client_socket.send((1).to_bytes(1, byteorder="big") )
             tot_recv += len(response)
             tt += 1
             if tt % 100 == 0:
