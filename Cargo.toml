@@ -2,7 +2,7 @@
 name = "block_server"
 version = "0.1.0"
 edition = "2024"
-description = "minimap2 frontend"
+description = "block server"
 license = "MIT"
 repository ="https://github.com/keithyin/block_server"
 
