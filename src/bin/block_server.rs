@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock, atomic::AtomicBool},
 };
 
+use anyhow::Context;
 use block_server::net::{ControlInfo, ControlResponse, extract_control_info};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -81,7 +82,12 @@ async fn data_msg_listener() -> anyhow::Result<()> {
         match listener.accept().await {
             Ok((socket, _)) => {
                 tokio::spawn(async move {
-                    let _ = data_msg_processor(socket).await;
+                    match data_msg_processor(socket).await {
+                        Ok(_) => {},
+                        Err(err) => {
+                            tracing::error!("data msg processor error: {:?}", err);
+                        }
+                    }
                 });
             }
             Err(e) => {
@@ -99,11 +105,12 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let mut buf: Vec<u8> = Vec::with_capacity(1024);
     loop {
         buf.clear();
-        let size = f.read_buf(&mut buf).await?;
+        let size = f.read_buf(&mut buf).await.context("read file error")?;
         if size == 0 {
+            tracing::info!("file send down");
             break;
         }
-        socket.write_all(&buf[..size]).await?;
+        socket.write_all(&buf[..size]).await.context("write socket error")?;
 
         // TODO receive the ack from compute server
     }

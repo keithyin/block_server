@@ -4,7 +4,7 @@ use tokio::{io::AsyncReadExt, net::TcpStream};
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ControlInfo {
     // instrument 2 block server
-    pub command: String, // "stop", "resume", "file_ready" "serving_files"
+    pub command: String, // "stop", "resume", "file_ready", "serving_files", "read_file"
     pub fpath: Option<String>,
     pub start_channel: Option<u32>,
 }
