@@ -102,7 +102,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
 
     let mut f = tokio::fs::File::open(control_msg.fpath.as_ref().unwrap()).await?;
 
-    let mut buf: Vec<u8> = Vec::with_capacity(1024);
+    let mut buf: Vec<u8> = Vec::with_capacity(1024 * 1024 * 2);
     loop {
         buf.clear();
         let size = f.read_buf(&mut buf).await.context("read file error")?;
