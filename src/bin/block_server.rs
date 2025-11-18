@@ -126,7 +126,7 @@ fn main() -> io::Result<()> {
     SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(4)
+        .worker_threads(2)
         .enable_io()
         .build()?;
 
