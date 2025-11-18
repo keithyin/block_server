@@ -117,6 +117,7 @@ fn main() -> io::Result<()> {
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(4)
+        .enable_io()
         .build()?;
 
     rt.block_on(async {
