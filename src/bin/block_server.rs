@@ -178,7 +178,7 @@ fn main() -> io::Result<()> {
             static ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let i = ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             
-            tracing::info!("start threads: {}. thread-name:{:?}", i, std::thread::current().name());
+            tracing::info!("start threads: {}. thread-name:{:?}. blocking?={}", i, std::thread::current().name(), tokio::runtime::Handle::try_current().is_err());
             affinity::set_thread_affinity([used_cpus[i]]).unwrap();
         })
         
