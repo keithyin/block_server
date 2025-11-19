@@ -181,13 +181,7 @@ fn main() -> io::Result<()> {
             tracing::info!("start threads: {}. thread-name:{:?}", i, std::thread::current().name());
             affinity::set_thread_affinity([used_cpus[i]]).unwrap();
         })
-        .on_thread_park(|| {
-            tracing::info!("thread park:{:?}", std::thread::current().name());
-        })
-        .on_thread_stop(|| {
-            tracing::info!("thread stop:{:?}", std::thread::current().name());
-
-        })
+        
         .enable_io()
         .max_blocking_threads(2)
         .build()?;
