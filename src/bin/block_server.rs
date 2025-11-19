@@ -10,7 +10,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use affinity;
+// use affinity;
 use clap::{self, Parser};
 use num_cpus;
 
@@ -22,7 +22,7 @@ static SERVED_FILES: OnceLock<Arc<Mutex<Vec<String>>>> = OnceLock::new();
 struct Cli {
     #[arg(
         long = "cpus",
-        help = "cpus. 0-3,5-6  . 0-3 means 0,1,2,3 (4cpus). default: use all cpus"
+        help = " DERECATED. cpus. 0-3,5-6  . 0-3 means 0,1,2,3 (4cpus). default: use all cpus"
     )]
     cpus: Option<String>,
 }
@@ -183,10 +183,9 @@ fn main() -> io::Result<()> {
      */
     // file io binding cpu, not ready yet
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(used_cpus.len() - 2)
-       
+        .worker_threads(1)
         .enable_io()
-        .max_blocking_threads(2)
+        .max_blocking_threads(3)
         .build()?;
 
     rt.block_on(async {
