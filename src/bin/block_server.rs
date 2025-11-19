@@ -171,6 +171,7 @@ fn main() -> io::Result<()> {
 
     SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
+    // file io binding cpu, not ready yet
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(used_cpus.len() - 2)
         .on_thread_start(move || {
