@@ -10,8 +10,42 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
+use affinity;
+use clap::{self, Parser};
+use num_cpus;
+
 static READ_FLAG: AtomicBool = AtomicBool::new(true);
 static SERVED_FILES: OnceLock<Arc<Mutex<Vec<String>>>> = OnceLock::new();
+
+#[derive(Debug, Parser, Clone)]
+#[command(version, about, long_about=None)]
+struct Cli {
+    #[arg(
+        long = "cpus",
+        help = "cpus. 0-3,5-6  . 0-3 means 0,1,2,3 (4cpus). default: use all cpus"
+    )]
+    cpus: Option<String>,
+}
+
+impl Cli {
+    fn cpus(&self) -> Vec<usize> {
+        match self.cpus.as_ref() {
+            Some(cpu_ids) => cpu_ids
+                .trim()
+                .split(",")
+                .flat_map(|range| {
+                    let (left, right) = range
+                        .split_once("-")
+                        .expect(&format!("unsupported format {}", range));
+                    let lower = left.parse::<usize>().unwrap();
+                    let upper = right.parse::<usize>().unwrap();
+                    (lower..=upper).into_iter()
+                })
+                .collect(),
+            None => (0..(num_cpus::get())).into_iter().collect(),
+        }
+    }
+}
 
 async fn control_msg_listener() -> anyhow::Result<()> {
     let listener = TcpListener::bind("0.0.0.0:30001").await?;
@@ -83,7 +117,7 @@ async fn data_msg_listener() -> anyhow::Result<()> {
             Ok((socket, _)) => {
                 tokio::spawn(async move {
                     match data_msg_processor(socket).await {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(err) => {
                             tracing::error!("data msg processor error: {:?}", err);
                         }
@@ -110,10 +144,16 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
             tracing::info!("file send done");
             break;
         }
-        socket.write_all(&buf[..size]).await.context("write socket error")?;
+        socket
+            .write_all(&buf[..size])
+            .await
+            .context("write socket error")?;
 
         let mut resp_bytes = [0_u8; 1];
-        socket.read_exact(&mut resp_bytes).await.context("wait response error")?;
+        socket
+            .read_exact(&mut resp_bytes)
+            .await
+            .context("wait response error")?;
 
         // TODO receive the ack from compute server
     }
@@ -123,10 +163,20 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
 fn main() -> io::Result<()> {
     tracing_subscriber::fmt::init();
 
+    let cli = Cli::parse();
+    let used_cpus = cli.cpus();
+    tracing::info!("threads: {}", used_cpus.len());
+    tracing::info!("cpu_ids: {:?}", used_cpus);
+
     SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
+        .worker_threads(used_cpus.len())
+        .on_thread_start(move || {
+            static ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let i = ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            affinity::set_thread_affinity([used_cpus[i]]).unwrap();
+        })
         .enable_io()
         .build()?;
 
