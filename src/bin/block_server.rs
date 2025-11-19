@@ -176,8 +176,16 @@ fn main() -> io::Result<()> {
         .on_thread_start(move || {
             static ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let i = ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            tracing::info!("start threads: {}", i);
+            
+            tracing::info!("start threads: {}. thread-name:{:?}", i, std::thread::current().name());
             affinity::set_thread_affinity([used_cpus[i]]).unwrap();
+        })
+        .on_thread_park(|| {
+            tracing::info!("thread park:{:?}", std::thread::current().name());
+        })
+        .on_thread_stop(|| {
+            tracing::info!("thread stop:{:?}", std::thread::current().name());
+
         })
         .enable_io()
         .max_blocking_threads(2)
