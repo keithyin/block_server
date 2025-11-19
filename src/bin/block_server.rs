@@ -163,11 +163,11 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
 fn main() -> io::Result<()> {
     tracing_subscriber::fmt::fmt().with_ansi(false).init();
 
-    let cli = Cli::parse();
-    let used_cpus = cli.cpus();
-    assert!(used_cpus.len() >= 3, "at least 3 threads");
-    tracing::info!("threads: {}", used_cpus.len());
-    tracing::info!("cpu_ids: {:?}", used_cpus);
+    let _cli = Cli::parse();
+    // let used_cpus = cli.cpus();
+    // assert!(used_cpus.len() >= 3, "at least 3 threads");
+    // tracing::info!("threads: {}", used_cpus.len());
+    // tracing::info!("cpu_ids: {:?}", used_cpus);
 
     SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
