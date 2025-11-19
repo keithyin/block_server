@@ -165,13 +165,14 @@ fn main() -> io::Result<()> {
 
     let cli = Cli::parse();
     let used_cpus = cli.cpus();
+    assert!(used_cpus.len() >= 3, "at least 3 threads");
     tracing::info!("threads: {}", used_cpus.len());
     tracing::info!("cpu_ids: {:?}", used_cpus);
 
     SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(used_cpus.len() - 1)
+        .worker_threads(used_cpus.len() - 2)
         .on_thread_start(move || {
             static ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let i = ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -179,6 +180,7 @@ fn main() -> io::Result<()> {
             affinity::set_thread_affinity([used_cpus[i]]).unwrap();
         })
         .enable_io()
+        .max_blocking_threads(2)
         .build()?;
 
     rt.block_on(async {
