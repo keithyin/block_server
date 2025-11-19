@@ -161,7 +161,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     Ok(())
 }
 fn main() -> io::Result<()> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::fmt().with_ansi(false).init();
 
     let cli = Cli::parse();
     let used_cpus = cli.cpus();
@@ -175,6 +175,7 @@ fn main() -> io::Result<()> {
         .on_thread_start(move || {
             static ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let i = ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tracing::info!("start threads: {}", i);
             affinity::set_thread_affinity([used_cpus[i]]).unwrap();
         })
         .enable_io()
