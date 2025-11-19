@@ -171,7 +171,7 @@ fn main() -> io::Result<()> {
     SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(used_cpus.len())
+        .worker_threads(used_cpus.len() - 1)
         .on_thread_start(move || {
             static ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let i = ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
