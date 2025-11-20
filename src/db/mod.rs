@@ -187,6 +187,8 @@ mod test {
     }
     #[tokio::test]
     async fn test_serving_file_database() {
+        tracing_subscriber::fmt::fmt().with_ansi(false).init();
+
         let db = ServingInfoDb::new("serving_info.db").await.unwrap();
         db.create_table().await.unwrap();
         db.insert_new_file("/path/to/file1").await.unwrap();
