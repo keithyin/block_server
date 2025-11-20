@@ -257,6 +257,7 @@ fn main() -> io::Result<()> {
         let db = block_server::db::ServingInfoDb::new(&db_path)
             .await
             .unwrap();
+        db.create_table().await.unwrap();
         let db = Arc::new(db);
         let _ = tokio::join!(
             control_msg_listener(db.clone()),
