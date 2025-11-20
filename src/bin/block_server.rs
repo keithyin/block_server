@@ -249,6 +249,7 @@ fn main() -> io::Result<()> {
         .on_thread_start(move || {
             affinity::set_thread_affinity(used_cpus.clone()).unwrap();
         })
+        .enable_time()
         .build()?;
 
     let db_path = cli.get_db_path();
