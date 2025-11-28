@@ -8,7 +8,7 @@ use block_server::net::{
     protocol::{ClientDataReq, ClientFpReq, DataMetaResp},
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter},
     net::{TcpListener, TcpStream},
 };
 
@@ -112,6 +112,8 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
             });
 
     let mut buf: Vec<u8> = vec![0_u8; buf_size];
+
+    let mut socket = BufWriter::new(socket);
 
     loop {
         // read a batch data
