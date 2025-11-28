@@ -1,10 +1,10 @@
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct ClientFpReq {
     #[serde(rename = "FP")]
     pub filepath: String,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct ClientDataReq {
     #[serde(rename = "CS")]
     pub channel_start: usize,
@@ -34,7 +34,7 @@ impl ClientDataReq {
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct DataMetaResp {
     #[serde(rename = "CS")]
     pub channel_start: usize,

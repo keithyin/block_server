@@ -77,17 +77,22 @@ async fn data_msg_listener(retry_times: Arc<AtomicU8>) -> anyhow::Result<()> {
 async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let file_req_msg = extract_meta_info::<ClientFpReq>(&mut socket).await?;
 
+    tracing::info!("FileReq:{:?}", file_req_msg);
+
     let mut f = tokio::fs::File::open(&file_req_msg.filepath).await?;
     let mut file_meta_len_bytes = [0_u8; 4];
     f.read_exact(&mut file_meta_len_bytes).await?;
     let file_meta_len = u32::from_le_bytes(file_meta_len_bytes);
-    let mut file_meta_bytes = Vec::with_capacity(file_meta_len as usize);
-    f.read_exact(&mut file_meta_bytes).await?;
+    let mut file_meta_bytes = vec![0_u8; file_meta_len as usize];
+    f.read_exact(&mut file_meta_bytes[..file_meta_len as usize]).await?;
 
     socket.write_all(&file_meta_len_bytes).await?;
+    tracing::info!("file_meta_bytes:{}", file_meta_bytes.len());
     socket.write_all(&file_meta_bytes).await?;
 
     let data_req_msg = extract_meta_info::<ClientDataReq>(&mut socket).await?;
+    tracing::info!("DataReq: {:?}", data_req_msg);
+
     let channel_end = data_req_msg.channel_end;
     let mut pos_data_start = data_req_msg.get_pos_data_start();
     let mut neg_data_start = data_req_msg.get_neg_data_start();
@@ -100,7 +105,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
                 0
             });
 
-    let mut buf: Vec<u8> = Vec::with_capacity(buf_size);
+    let mut buf: Vec<u8> = vec![0_u8; buf_size];
 
     loop {
         // read a batch data
@@ -127,11 +132,12 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
             negative_data_length: cur_negative_size,
         };
         let resp_json = serde_json::to_string(&resp_meta)?;
-        let resp_json_bytes = resp_json.as_bytes().to_vec();
+        // tracing::info!("resp_json:{resp_json}");
+        // tracing::info!("resp_json_bytes:{:?}", resp_json.as_bytes());
         socket
-            .write_all(&resp_json_bytes.len().to_le_bytes())
+            .write_all(&((resp_json.as_bytes().len() as u32).to_le_bytes()))
             .await?;
-        socket.write_all(&resp_json_bytes).await?;
+        socket.write_all(resp_json.as_bytes()).await?;
         socket
             .write_all(&buf[..(cur_positive_size + cur_negative_size)])
             .await?;
@@ -154,7 +160,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let resp_json = serde_json::to_string(&resp_meta)?;
     let resp_json_bytes = resp_json.as_bytes().to_vec();
     socket
-        .write_all(&resp_json_bytes.len().to_le_bytes())
+        .write_all(&(resp_json_bytes.len() as u32).to_le_bytes())
         .await?;
     socket.write_all(&resp_json_bytes).await?;
 
