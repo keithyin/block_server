@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
-use block_server::net::{ControlInfo, ControlResponse, extract_control_info};
+use block_server::net::{ControlInfo, ControlResponse, extract_meta_info};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -78,7 +78,7 @@ async fn control_msg_processor(
 ) -> anyhow::Result<()> {
     let mut socket = socket;
 
-    let control_info = extract_control_info::<ControlInfo>(&mut socket).await?;
+    let control_info = extract_meta_info::<ControlInfo>(&mut socket).await?;
 
     match control_info.command.as_str() {
         "stop" => {
@@ -173,7 +173,7 @@ async fn data_msg_processor(
     mut socket: TcpStream,
     serving_files_db: Arc<block_server::db::ServingInfoDb>,
 ) -> anyhow::Result<()> {
-    let control_msg = extract_control_info::<ControlInfo>(&mut socket).await?;
+    let control_msg = extract_meta_info::<ControlInfo>(&mut socket).await?;
 
     let mut f = tokio::fs::File::open(control_msg.fpath.as_ref().unwrap()).await?;
     serving_files_db
