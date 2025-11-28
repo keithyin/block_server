@@ -80,11 +80,17 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     tracing::info!("FileReq:{:?}", file_req_msg);
 
     let mut f = tokio::fs::File::open(&file_req_msg.filepath).await?;
+    let mut file_meta_start_pos_bytes = [0_u8; 8];
+    f.read_exact(&mut file_meta_start_pos_bytes).await?;
+    let file_meta_start_pos = u64::from_le_bytes(file_meta_start_pos_bytes);
     let mut file_meta_len_bytes = [0_u8; 4];
     f.read_exact(&mut file_meta_len_bytes).await?;
     let file_meta_len = u32::from_le_bytes(file_meta_len_bytes);
+
+    f.seek(io::SeekFrom::Start(file_meta_start_pos)).await?;
     let mut file_meta_bytes = vec![0_u8; file_meta_len as usize];
-    f.read_exact(&mut file_meta_bytes[..file_meta_len as usize]).await?;
+    f.read_exact(&mut file_meta_bytes[..file_meta_len as usize])
+        .await?;
 
     socket.write_all(&file_meta_len_bytes).await?;
     tracing::info!("file_meta_bytes:{}", file_meta_bytes.len());
