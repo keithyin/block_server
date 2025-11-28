@@ -18,9 +18,9 @@ with h5py.File(input_h5, "r") as h5:
     meta["data_pos_shape"] = data_pos.shape
     meta["data_neg_shape"] = data_neg.shape
     meta["posDataStart"] = 12
-    meta["negDataStart"] = 12 + np.prod(data_pos.shape)
-    meta["posChannelPoints"] = data_pos.shape[1]
-    meta["negChannelPoints"] = data_neg.shape[1]
+    meta["negDataStart"] = int(12 + np.prod(data_pos.shape))
+    meta["posChannelPoints"] = int(data_pos.shape[1])
+    meta["negChannelPoints"] = int(data_neg.shape[1])
 
 
 ### --- 写入二进制文件 --- ###
