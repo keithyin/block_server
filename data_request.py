@@ -92,18 +92,18 @@ def tcp_client():
             positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
                 [num_channels, -1]
             )
-            assert all(
+            assert (
                 positive_data
                 == data_pos[channel_cursor : (channel_cursor + num_channels), :]
-            )
+            ).all()
             negative_data = read_exact(client_socket, negative_data_lenth)
             negative_data = np.array(list(negative_data), dtype=np.uint8).reshape(
                 [num_channels, -1]
             )
-            assert all(
+            assert (
                 negative_data
                 == data_neg[channel_cursor : (channel_cursor + num_channels), :]
-            )
+            ).all()
             print("check ok")
 
             channel_cursor += meta_info["NC"]
