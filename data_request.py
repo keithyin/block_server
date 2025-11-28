@@ -56,17 +56,13 @@ def tcp_client():
             "CS": 0,  # channel start。请求的 channel 起始
             "CE": meta_info["data_pos_shape"][0],  # channel end。请求的 channel 结束。
             "B": 128,  # batch size, 文件服务一次性 返回多少 channel 的数据
-            "PDS": meta_info[
-                "data_pos_offset"
-            ],  # positive data start. 对应 posDataStart
-            "NDS": meta_info[
-                "data_neg_offset"
-            ],  # negative data start. 对应 negDataStart
-            "PDCL": meta_info["data_pos_shape"][
-                1
+            "PDS": meta_info["posDataStart"],  # positive data start. 对应 posDataStart
+            "NDS": meta_info["negDataStart"],  # negative data start. 对应 negDataStart
+            "PDCL": meta_info[
+                "posChannelPoints"
             ],  # 单channel的正向电流点数，对应 posChannelPoints
-            "NDCL": meta_info["data_neg_shape"][
-                1
+            "NDCL": meta_info[
+                "negChannelPoints"
             ],  # 单channel的负向电流点数，对应 posChannelPoints
             "UN": True,  # use negative data. 如果为 True, 则返回 负向电流数据，否则不返回
         }
