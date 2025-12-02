@@ -3,12 +3,13 @@ use std::{
     sync::{Arc, Mutex, OnceLock, atomic::AtomicU8},
 };
 
+use anyhow::Context;
 use block_server::net::{
     extract_meta_info,
     protocol::{ClientDataReq, ClientFpReq, DataMetaResp},
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter},
     net::{TcpListener, TcpStream},
 };
 
@@ -57,12 +58,16 @@ async fn data_msg_listener(retry_times: Arc<AtomicU8>) -> anyhow::Result<()> {
     retry_times.store(0, std::sync::atomic::Ordering::SeqCst);
     loop {
         match listener.accept().await {
-            Ok((socket, _)) => {
+            Ok((socket, socker_addr)) => {
                 tokio::spawn(async move {
                     match data_msg_processor(socket).await {
                         Ok(_) => {}
                         Err(err) => {
-                            tracing::error!("data msg processor error: {:?}", err);
+                            tracing::error!(
+                                "socker_addr: {:?}, data msg processor error: {:?}.",
+                                socker_addr,
+                                err
+                            );
                         }
                     }
                 });
@@ -79,9 +84,18 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
 
     tracing::info!("FileReq:{:?}", file_req_msg);
 
-    let mut f = tokio::fs::File::open(&file_req_msg.filepath).await?;
+    let mut f = tokio::fs::File::open(&file_req_msg.filepath)
+        .await
+        .context(format!("Failed to open file {}", &file_req_msg.filepath))?;
+
     let mut file_meta_start_pos_bytes = [0_u8; 8];
-    f.read_exact(&mut file_meta_start_pos_bytes).await?;
+    f.read_exact(&mut file_meta_start_pos_bytes)
+        .await
+        .context(format!(
+            "read meta start pos bytes error, {}",
+            &file_req_msg.filepath
+        ))?;
+
     let file_meta_start_pos = u64::from_le_bytes(file_meta_start_pos_bytes);
     let mut file_meta_len_bytes = [0_u8; 4];
     f.read_exact(&mut file_meta_len_bytes).await?;
@@ -112,6 +126,8 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
             });
 
     let mut buf: Vec<u8> = vec![0_u8; buf_size];
+
+    let mut socket = BufWriter::new(socket);
 
     loop {
         // read a batch data
