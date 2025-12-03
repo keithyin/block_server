@@ -88,7 +88,7 @@ def tcp_client():
             num_channels = meta_info["NC"]
             positive_data = read_exact(client_socket, positive_data_length)
             # print(positive_data[:100])
-
+            
             positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
                 [num_channels, -1]
             )
