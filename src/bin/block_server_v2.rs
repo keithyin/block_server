@@ -186,6 +186,9 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         .await?;
     socket.write_all(&resp_json_bytes).await?;
 
+    tracing::info!("FileReq:{:?}. Send Done.", file_req_msg);
+
+
     Ok(())
 }
 
