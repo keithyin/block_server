@@ -21,6 +21,7 @@ with h5py.File(input_h5, "r") as h5:
     meta["negDataStart"] = int(12 + np.prod(data_pos.shape))
     meta["posChannelPoints"] = int(data_pos.shape[1])
     meta["negChannelPoints"] = int(data_neg.shape[1])
+    meta["numChannels"] = int(data_pos.shape[0])
 
 
 ### --- 写入二进制文件 --- ###

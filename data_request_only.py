@@ -1,7 +1,7 @@
 import socket
 import json
-import h5py
 import numpy as np
+import threading
 
 
 def read_exact(sock: socket.socket, n: int) -> bytes:
@@ -20,7 +20,7 @@ def tcp_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # 服务器地址和端口
-    server_host = "127.0.0.1"
+    server_host = "192.168.3.55"
     # server_host = '127.0.0.1'  # 本地回环地址
     server_port = 30002
 
@@ -32,7 +32,7 @@ def tcp_client():
 
         # client send file request to block_server
         req_data = {
-            "FP": "/data1/raw-signal-data/20251203_240601Y0088_Run0001_00_pk0001.data"
+            "FP": "/data1/raw-signal-data/20251124_240601Y0014_Run0003_02_pk0022.bin"
         }
         req_bytes = json.dumps(req_data).encode("utf-8")
         bytes_len = len(req_bytes)
@@ -89,14 +89,14 @@ def tcp_client():
             positive_data = read_exact(client_socket, positive_data_length)
             # print(positive_data[:100])
             
-            positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
-                [num_channels, -1]
-            )
+            #positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
+            #    [num_channels, -1]
+            #)
 
             negative_data = read_exact(client_socket, negative_data_lenth)
-            negative_data = np.array(list(negative_data), dtype=np.uint8).reshape(
-                [num_channels, -1]
-            )
+            #negative_data = np.array(list(negative_data), dtype=np.uint8).reshape(
+            #    [num_channels, -1]
+            #)
             print("check ok")
 
             channel_cursor += meta_info["NC"]
@@ -113,4 +113,13 @@ def tcp_client():
 
 
 if __name__ == "__main__":
-    tcp_client()
+    
+    all_threads = []
+    for _ in range(0, 10):
+        t = threading.Thread(target=tcp_client)
+        t.start()
+        
+        all_threads.append(t)
+    
+    for t in all_threads:
+        t.join()    
