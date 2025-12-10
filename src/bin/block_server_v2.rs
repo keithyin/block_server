@@ -1,3 +1,4 @@
+use core::num;
 use std::{
     io,
     sync::{Arc, Mutex, OnceLock, atomic::AtomicU8},
@@ -114,8 +115,8 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     tracing::info!("DataReq: {:?}", data_req_msg);
 
     let channel_end = data_req_msg.channel_end;
-    let mut pos_data_start = data_req_msg.get_pos_data_start();
-    let mut neg_data_start = data_req_msg.get_neg_data_start();
+    let pos_data_start = data_req_msg.get_pos_data_start();
+    let neg_data_start = data_req_msg.get_neg_data_start();
     let mut channel_start = data_req_msg.channel_start;
     let buf_size = data_req_msg.batch_size
         * (data_req_msg.positive_data_per_channel_length
@@ -133,18 +134,46 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         // read a batch data
         let cur_batch_size = (channel_end - channel_start).min(data_req_msg.batch_size);
         let cur_positive_size = cur_batch_size * data_req_msg.positive_data_per_channel_length;
+
+        let cur_pos_data_start =
+            pos_data_start + channel_start * data_req_msg.positive_consencutive_points();
+
         let cur_negative_size = if data_req_msg.use_negative {
             cur_batch_size * data_req_msg.negative_data_per_channel_length
         } else {
             0
         };
 
-        f.seek(io::SeekFrom::Start(pos_data_start as u64)).await?;
-        f.read_exact(&mut buf[..cur_positive_size]).await?;
+        let cur_neg_data_start =
+            neg_data_start + channel_start * data_req_msg.negative_consencutive_points();
+
+        let blocks_per_channel = data_req_msg.positive_data_per_channel_length
+            / data_req_msg.positive_consencutive_points();
+        read_data(
+            &mut f,
+            &mut buf[..cur_positive_size],
+            cur_pos_data_start,
+            cur_batch_size,
+            data_req_msg.positive_consencutive_points(),
+            blocks_per_channel,
+            data_req_msg.tot_channels,
+        )
+        .await?;
+
         if data_req_msg.use_negative {
-            f.seek(io::SeekFrom::Start(neg_data_start as u64)).await?;
-            f.read_exact(&mut buf[cur_positive_size..(cur_positive_size + cur_negative_size)])
-                .await?;
+            let blocks_per_channel = data_req_msg.negative_data_per_channel_length
+                / data_req_msg.negative_consencutive_points();
+
+            read_data(
+                &mut f,
+                &mut buf[cur_positive_size..(cur_positive_size + cur_negative_size)],
+                cur_neg_data_start,
+                cur_batch_size,
+                data_req_msg.negative_consencutive_points(),
+                blocks_per_channel,
+                data_req_msg.tot_channels,
+            )
+            .await?;
         }
 
         let resp_meta = DataMetaResp {
@@ -165,8 +194,6 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
             .await?;
 
         channel_start += cur_batch_size;
-        pos_data_start += cur_positive_size;
-        neg_data_start += cur_negative_size;
 
         if channel_start >= channel_end {
             break;
@@ -189,6 +216,37 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
 
     tracing::info!("FileReq:{:?}. Send Done.", file_req_msg);
 
+    Ok(())
+}
+
+async fn read_data(
+    f: &mut tokio::fs::File,
+    buf: &mut [u8],
+    mut data_start: usize,
+    num_channels: usize,
+    channel_consecutive_points: usize,
+    blocks_per_channel: usize,
+    tot_channels: usize,
+) -> anyhow::Result<()> {
+    let stride = tot_channels * channel_consecutive_points;
+
+    let points_per_channel = blocks_per_channel * channel_consecutive_points;
+    for block_idx in 0..blocks_per_channel {
+        let block_shift = block_idx * channel_consecutive_points;
+        f.seek(io::SeekFrom::Start(data_start as u64)).await?;
+
+        for channel_idx in 0..num_channels {
+            let data_shift = channel_idx * points_per_channel + block_shift;
+            tracing::info!(
+                "writing to {}-{}",
+                data_shift,
+                data_shift + channel_consecutive_points
+            );
+            f.read_exact(&mut buf[data_shift..(data_shift + channel_consecutive_points)])
+                .await?;
+        }
+        data_start += stride;
+    }
     Ok(())
 }
 

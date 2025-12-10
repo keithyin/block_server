@@ -9,7 +9,8 @@ def read_exact(sock: socket.socket, n: int) -> bytes:
     while len(buf) < n:
         chunk = sock.recv(n - len(buf))
         if not chunk:  # 对方断开或EOF
-            raise ConnectionError("connection closed before enough data was received")
+            raise ConnectionError(
+                "connection closed before enough data was received")
         buf += chunk
     return buf
 
@@ -37,7 +38,7 @@ def tcp_client():
 
         # client send file request to block_server
         req_data = {
-            "FP": "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin"
+            "FP": "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin-2"
         }
         req_bytes = json.dumps(req_data).encode("utf-8")
         bytes_len = len(req_bytes)
@@ -54,10 +55,12 @@ def tcp_client():
         # client send data request to block_server
         data_req = {
             "CS": 0,  # channel start。请求的 channel 起始
-            "CE": meta_info["data_pos_shape"][0],  # channel end。请求的 channel 结束。
+            "CE": meta_info["numChannels"],  # channel end。请求的 channel 结束。
             "B": 128,  # batch size, 文件服务一次性 返回多少 channel 的数据
-            "PDS": meta_info["posDataStart"],  # positive data start. 对应 posDataStart
-            "NDS": meta_info["negDataStart"],  # negative data start. 对应 negDataStart
+            # positive data start. 对应 posDataStart
+            "PDS": meta_info["posDataStart"],
+            # negative data start. 对应 negDataStart
+            "NDS": meta_info["negDataStart"],
             "PDCL": meta_info[
                 "posChannelPoints"
             ],  # 单channel的正向电流点数，对应 posChannelPoints
@@ -66,9 +69,12 @@ def tcp_client():
             ],  # 单channel的负向电流点数，对应 posChannelPoints
             "UN": True,  # use negative data. 如果为 True, 则返回 负向电流数据，否则不返回
             "TC": meta_info["numChannels"],
+            "PCP": meta_info["posConsecutivePoints"],
+            "NCP": meta_info["negConsecutivePoints"]
         }
         data_req_bytes = json.dumps(data_req).encode("utf-8")
-        client_socket.sendall(len(data_req_bytes).to_bytes(4, byteorder="little"))
+        client_socket.sendall(
+            len(data_req_bytes).to_bytes(4, byteorder="little"))
         client_socket.sendall(data_req_bytes)
 
         # reciever the channel raw signal data from block_server
@@ -93,18 +99,23 @@ def tcp_client():
             positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
                 [num_channels, -1]
             )
+
+            print(positive_data
+                  == data_pos[channel_cursor: (channel_cursor + num_channels), :]
+                  )
+
             assert (
                 positive_data
-                == data_pos[channel_cursor : (channel_cursor + num_channels), :]
-            ).all()
+                == data_pos[channel_cursor: (channel_cursor + num_channels), :]
+            ).all(), f"pos assert error"
             negative_data = read_exact(client_socket, negative_data_lenth)
             negative_data = np.array(list(negative_data), dtype=np.uint8).reshape(
                 [num_channels, -1]
             )
             assert (
                 negative_data
-                == data_neg[channel_cursor : (channel_cursor + num_channels), :]
-            ).all()
+                == data_neg[channel_cursor: (channel_cursor + num_channels), :]
+            ).all(), "neg assert error"
             print("check ok")
 
             channel_cursor += meta_info["NC"]

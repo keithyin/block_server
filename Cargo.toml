@@ -1,6 +1,6 @@
 [package]
 name = "block_server"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 description = "block server"
 license = "MIT"
