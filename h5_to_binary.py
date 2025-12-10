@@ -3,8 +3,8 @@ import json
 import struct
 import numpy as np
 
-input_h5 = "/data1/raw-signal-data/20251124_240601Y0014_Run0003_02_pk0022.hdf5"
-output_bin = "/data1/raw-signal-data/20251124_240601Y0014_Run0003_02_pk0022.bin"
+input_h5 = "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.hdf5"
+output_bin = "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin"
 
 with h5py.File(input_h5, "r") as h5:
 
