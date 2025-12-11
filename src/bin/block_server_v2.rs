@@ -98,6 +98,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         ))?;
 
     let file_meta_start_pos = u64::from_le_bytes(file_meta_start_pos_bytes);
+    tracing::info!("meta_start_pos:{file_meta_start_pos:?}");
     let mut file_meta_len_bytes = [0_u8; 4];
     f.read_exact(&mut file_meta_len_bytes).await?;
     let file_meta_len = u32::from_le_bytes(file_meta_len_bytes);
@@ -105,11 +106,14 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     f.seek(io::SeekFrom::Start(file_meta_start_pos)).await?;
     let mut file_meta_bytes = vec![0_u8; file_meta_len as usize];
     f.read_exact(&mut file_meta_bytes[..file_meta_len as usize])
-        .await?;
+        .await.context("read meta error")?;
 
-    socket.write_all(&file_meta_len_bytes).await?;
+    socket.write_all(&file_meta_len_bytes).await.context("write file meta len error")?;
     tracing::info!("file_meta_bytes:{}", file_meta_bytes.len());
-    socket.write_all(&file_meta_bytes).await?;
+    
+    tracing::info!("file_meta:{:?}", String::from_utf8(file_meta_bytes.clone()));
+    socket.write_all(&file_meta_bytes).await.context("write file meta bytes error")?;
+    tracing::info!("write file meta bytes DONE");
 
     let data_req_msg = extract_meta_info::<ClientDataReq>(&mut socket).await?;
     tracing::info!("DataReq: {:?}", data_req_msg);
