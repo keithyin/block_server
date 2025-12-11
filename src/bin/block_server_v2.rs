@@ -237,11 +237,11 @@ async fn read_data(
 
         for channel_idx in 0..num_channels {
             let data_shift = channel_idx * points_per_channel + block_shift;
-            tracing::info!(
-                "writing to {}-{}",
-                data_shift,
-                data_shift + channel_consecutive_points
-            );
+            // tracing::info!(
+            //     "writing to {}-{}",
+            //     data_shift,
+            //     data_shift + channel_consecutive_points
+            // );
             f.read_exact(&mut buf[data_shift..(data_shift + channel_consecutive_points)])
                 .await?;
         }
