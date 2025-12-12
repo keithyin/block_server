@@ -148,7 +148,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         let cur_pos_data_start: usize =
             pos_data_start + channel_start * data_req_msg.positive_consencutive_points();
 
-        tracing::info!("cur_pos_data_start:{cur_pos_data_start}. {pos_data_start}, {channel_start}");
+        // tracing::info!("cur_pos_data_start:{cur_pos_data_start}. {pos_data_start}, {channel_start}");
 
         let cur_negative_size = if data_req_msg.use_negative {
             cur_batch_size * data_req_msg.negative_data_per_channel_length
