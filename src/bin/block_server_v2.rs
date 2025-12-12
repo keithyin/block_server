@@ -1,4 +1,3 @@
-use core::num;
 use std::{
     io,
     sync::{Arc, Mutex, OnceLock, atomic::AtomicU8},
@@ -106,13 +105,20 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     f.seek(io::SeekFrom::Start(file_meta_start_pos)).await?;
     let mut file_meta_bytes = vec![0_u8; file_meta_len as usize];
     f.read_exact(&mut file_meta_bytes[..file_meta_len as usize])
-        .await.context("read meta error")?;
+        .await
+        .context("read meta error")?;
 
-    socket.write_all(&file_meta_len_bytes).await.context("write file meta len error")?;
+    socket
+        .write_all(&file_meta_len_bytes)
+        .await
+        .context("write file meta len error")?;
     tracing::info!("file_meta_bytes:{}", file_meta_bytes.len());
-    
+
     tracing::info!("file_meta:{:?}", String::from_utf8(file_meta_bytes.clone()));
-    socket.write_all(&file_meta_bytes).await.context("write file meta bytes error")?;
+    socket
+        .write_all(&file_meta_bytes)
+        .await
+        .context("write file meta bytes error")?;
     tracing::info!("write file meta bytes DONE");
 
     let data_req_msg = extract_meta_info::<ClientDataReq>(&mut socket).await?;
@@ -139,8 +145,10 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         let cur_batch_size = (channel_end - channel_start).min(data_req_msg.batch_size);
         let cur_positive_size = cur_batch_size * data_req_msg.positive_data_per_channel_length;
 
-        let cur_pos_data_start =
+        let cur_pos_data_start: usize =
             pos_data_start + channel_start * data_req_msg.positive_consencutive_points();
+
+        tracing::info!("cur_pos_data_start:{cur_pos_data_start}. {pos_data_start}, {channel_start}");
 
         let cur_negative_size = if data_req_msg.use_negative {
             cur_batch_size * data_req_msg.negative_data_per_channel_length
@@ -153,6 +161,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
 
         let blocks_per_channel = data_req_msg.positive_data_per_channel_length
             / data_req_msg.positive_consencutive_points();
+
         read_data(
             &mut f,
             &mut buf[..cur_positive_size],
@@ -189,10 +198,13 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         let resp_json = serde_json::to_string(&resp_meta)?;
         // tracing::info!("resp_json:{resp_json}");
         // tracing::info!("resp_json_bytes:{:?}", resp_json.as_bytes());
+
         socket
             .write_all(&((resp_json.as_bytes().len() as u32).to_le_bytes()))
             .await?;
+
         socket.write_all(resp_json.as_bytes()).await?;
+
         socket
             .write_all(&buf[..(cur_positive_size + cur_negative_size)])
             .await?;

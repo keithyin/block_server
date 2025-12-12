@@ -51,7 +51,7 @@ def tcp_client():
 
         # client send data request to block_server
         data_req = {
-            "CS": 0,  # channel start。请求的 channel 起始
+            "CS": 5,  # channel start。请求的 channel 起始
             "CE": meta_info["numChannels"],  # channel end。请求的 channel 结束。
             "B": 257,  # batch size, 文件服务一次性 返回多少 channel 的数据
             # positive data start. 对应 posDataStart
@@ -91,11 +91,14 @@ def tcp_client():
             negative_data_lenth = meta_info["NDL"]  # 仅对于 UN is True 时生效
             num_channels = meta_info["NC"]
             positive_data = read_exact(client_socket, positive_data_length)
-            # # print(positive_data[:100])
+            
+            # print(positive_data[:100])
 
-            # positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
-            #     [num_channels, -1]
-            # )
+            positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
+                [num_channels, -1]
+            )
+            # print(positive_data[])
+            break
 
             negative_data = read_exact(client_socket, negative_data_lenth)
             # negative_data = np.array(list(negative_data), dtype=np.uint8).reshape(

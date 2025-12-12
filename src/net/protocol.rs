@@ -53,11 +53,11 @@ impl ClientDataReq {
     }
 
     pub fn get_pos_data_start(&self) -> usize {
-        self.positive_data_start + self.channel_start * self.positive_consencutive_points()
+        self.positive_data_start
     }
 
     pub fn get_neg_data_start(&self) -> usize {
-        self.negative_data_start + self.channel_start * self.negative_consencutive_points()
+        self.negative_data_start
     }
 }
 

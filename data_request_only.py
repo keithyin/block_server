@@ -49,10 +49,11 @@ def tcp_client():
         print(f"file_meta:{meta_info}")
 
         # client send data request to block_server
+        c_start = 0
         data_req = {
-            "CS": 0,  # channel start。请求的 channel 起始
+            "CS": c_start,  # channel start。请求的 channel 起始
             "CE": meta_info["numChannels"],  # channel end。请求的 channel 结束。
-            "B": 128,  # batch size, 文件服务一次性 返回多少 channel 的数据
+            "B": 1,  # batch size, 文件服务一次性 返回多少 channel 的数据
             # positive data start. 对应 posDataStart
             "PDS": meta_info["posDataStart"],
             # negative data start. 对应 negDataStart
@@ -71,7 +72,7 @@ def tcp_client():
         client_socket.sendall(data_req_bytes)
 
         # reciever the channel raw signal data from block_server
-        channel_cursor = 0
+        channel_cursor = c_start
         print("start receving data")
         while True:
             meta_len_bytes = read_exact(client_socket, 4)
