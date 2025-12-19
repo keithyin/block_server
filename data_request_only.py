@@ -53,7 +53,7 @@ def tcp_client():
         data_req = {
             "CS": c_start,  # channel start。请求的 channel 起始
             "CE": meta_info["numChannels"],  # channel end。请求的 channel 结束。
-            "B": 1,  # batch size, 文件服务一次性 返回多少 channel 的数据
+            "B": 128,  # batch size, 文件服务一次性 返回多少 channel 的数据
             # positive data start. 对应 posDataStart
             "PDS": meta_info["posDataStart"],
             # negative data start. 对应 negDataStart

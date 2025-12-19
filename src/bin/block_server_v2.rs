@@ -1,6 +1,7 @@
 use std::{
     io,
     sync::{Arc, Mutex, OnceLock, atomic::AtomicU8},
+    time::Duration,
 };
 
 use anyhow::Context;
@@ -305,6 +306,8 @@ fn main() -> io::Result<()> {
                     retry_times.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 }
             }
+            std::thread::sleep(Duration::from_secs(30));
+
             if retry_times.load(std::sync::atomic::Ordering::SeqCst) > 20 {
                 tracing::error!("retry error. break now");
                 break;
