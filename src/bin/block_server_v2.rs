@@ -301,12 +301,10 @@ fn main() -> io::Result<()> {
 
     if let Some(file) = log_file {
         let (non_blocking, _guard) = tracing_appender::non_blocking(file);
-        let subscriber = tracing_subscriber::fmt()
+        tracing_subscriber::fmt()
             .with_ansi(false)
             .with_writer(non_blocking)
-            .finish();
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("Failed to set global default subscriber");
+            .init();
     } else {
         tracing_subscriber::fmt::fmt().with_ansi(false).init();
     }
