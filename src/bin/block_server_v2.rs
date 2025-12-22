@@ -1,7 +1,7 @@
 use std::{
     io,
     sync::{Arc, Mutex, OnceLock, atomic::AtomicU8},
-    time::Duration,
+    time::{Duration, UNIX_EPOCH},
 };
 
 use anyhow::Context;
@@ -23,6 +23,9 @@ static SERVED_FILES: OnceLock<Arc<Mutex<Vec<String>>>> = OnceLock::new();
 #[derive(Debug, Parser, Clone)]
 #[command(version, about, long_about=None)]
 struct Cli {
+    #[arg(long = "logDir")]
+    pub log_dir: Option<String>,
+
     #[arg(
         long = "cpus",
         help = "cpus. 0-3,5-6  . 0-3 means 0,1,2,3 (4cpus). default: use all cpus"
@@ -49,6 +52,18 @@ impl Cli {
                 })
                 .collect(),
             None => (0..(num_cpus::get())).into_iter().collect(),
+        }
+    }
+
+    fn get_log_dir(&self) -> Option<&str> {
+        match self.log_dir.as_ref() {
+            Some(dir) => {
+                if !std::path::Path::new(dir).exists() {
+                    std::fs::create_dir_all(dir).expect("Failed to create log directory");
+                }
+                Some(dir)
+            }
+            None => None,
         }
     }
 }
@@ -268,10 +283,34 @@ async fn read_data(
 }
 
 fn main() -> io::Result<()> {
-    tracing_subscriber::fmt::fmt().with_ansi(false).init();
-
     let cli = Cli::parse();
     let used_cpus = cli.cpus();
+    let now = std::time::SystemTime::now();
+
+    let log_dir = cli
+        .get_log_dir()
+        .map(|dir_path| std::path::Path::new(dir_path));
+    let file_name = log_dir.map(|v| {
+        v.join(format!(
+            "block_server_v2.tt-{}.log",
+            now.duration_since(UNIX_EPOCH).unwrap().as_millis()
+        ))
+    });
+
+    let log_file = file_name.map(|fname| std::fs::File::create(fname).unwrap());
+
+    if let Some(file) = log_file {
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file);
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(non_blocking)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("Failed to set global default subscriber");
+    } else {
+        tracing_subscriber::fmt::fmt().with_ansi(false).init();
+    }
+
     assert!(used_cpus.len() >= 3, "at least 3 threads");
     tracing::info!("num_cpus: {}", used_cpus.len());
     tracing::info!("cpu_ids: {:?}", used_cpus);
