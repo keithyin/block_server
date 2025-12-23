@@ -299,15 +299,17 @@ fn main() -> io::Result<()> {
 
     let log_file = file_name.map(|fname| std::fs::File::create(fname).unwrap());
 
-    if let Some(file) = log_file {
+    let _guard = if let Some(file) = log_file {
         let (non_blocking, _guard) = tracing_appender::non_blocking(file);
-        tracing_subscriber::fmt()
+        tracing_subscriber::fmt::fmt()
             .with_ansi(false)
             .with_writer(non_blocking)
             .init();
+        Some(_guard)
     } else {
         tracing_subscriber::fmt::fmt().with_ansi(false).init();
-    }
+        None
+    };
 
     assert!(used_cpus.len() >= 3, "at least 3 threads");
     tracing::info!("num_cpus: {}", used_cpus.len());
