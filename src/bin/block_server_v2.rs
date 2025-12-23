@@ -99,7 +99,7 @@ async fn data_msg_listener(retry_times: Arc<AtomicU8>) -> anyhow::Result<()> {
 async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let file_req_msg = extract_meta_info::<ClientFpReq>(&mut socket).await?;
 
-    let info_span = info_span!("data_msg_processor", %file_req_msg.filepath);
+    let info_span = info_span!("DataMsgProcessor", %file_req_msg.filepath);
     let _guard = info_span.enter();
 
     tracing::info!("FileReq:{:?}", file_req_msg);
@@ -134,7 +134,11 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         .context("write file meta len error")?;
     tracing::info!("FileMetaBytes:{}", file_meta_bytes.len());
 
-    tracing::info!("FileMeta:{:?}", String::from_utf8(file_meta_bytes.clone()));
+    tracing::info!(
+        "FileMeta:{:?}",
+        String::from_utf8(file_meta_bytes.clone()).map(|v| v.replace("\"", ""))
+    );
+    
     socket
         .write_all(&file_meta_bytes)
         .await
