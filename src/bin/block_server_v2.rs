@@ -17,6 +17,7 @@ use tokio::{
 use affinity;
 use clap::{self, Parser};
 use num_cpus;
+use tracing::info_span;
 
 static SERVED_FILES: OnceLock<Arc<Mutex<Vec<String>>>> = OnceLock::new();
 
@@ -98,6 +99,9 @@ async fn data_msg_listener(retry_times: Arc<AtomicU8>) -> anyhow::Result<()> {
 async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let file_req_msg = extract_meta_info::<ClientFpReq>(&mut socket).await?;
 
+    let info_span = info_span!("data_msg_processor", %file_req_msg.filepath);
+    let _guard = info_span.enter();
+
     tracing::info!("FileReq:{:?}", file_req_msg);
 
     let mut f = tokio::fs::File::open(&file_req_msg.filepath)
@@ -113,7 +117,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         ))?;
 
     let file_meta_start_pos = u64::from_le_bytes(file_meta_start_pos_bytes);
-    tracing::info!("meta_start_pos:{file_meta_start_pos:?}");
+    tracing::info!("MetaStartPos:{file_meta_start_pos:?}");
     let mut file_meta_len_bytes = [0_u8; 4];
     f.read_exact(&mut file_meta_len_bytes).await?;
     let file_meta_len = u32::from_le_bytes(file_meta_len_bytes);
@@ -128,9 +132,9 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         .write_all(&file_meta_len_bytes)
         .await
         .context("write file meta len error")?;
-    tracing::info!("file_meta_bytes:{}", file_meta_bytes.len());
+    tracing::info!("FileMetaBytes:{}", file_meta_bytes.len());
 
-    tracing::info!("file_meta:{:?}", String::from_utf8(file_meta_bytes.clone()));
+    tracing::info!("FileMeta:{:?}", String::from_utf8(file_meta_bytes.clone()));
     socket
         .write_all(&file_meta_bytes)
         .await
