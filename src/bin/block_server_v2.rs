@@ -1,7 +1,7 @@
 use std::{
     io,
     sync::{Arc, Mutex, OnceLock, atomic::AtomicU8},
-    time::{Duration, UNIX_EPOCH},
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 
 use anyhow::Context;
@@ -156,6 +156,9 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
 
     let mut socket = BufWriter::new(socket);
 
+    let mut disk_read_bytes = 0;
+    let mut disk_read_elapsed_times = 0;
+
     loop {
         // read a batch data
         let cur_batch_size = (channel_end - channel_start).min(data_req_msg.batch_size);
@@ -178,6 +181,8 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         let blocks_per_channel = data_req_msg.positive_data_per_channel_length
             / data_req_msg.positive_consencutive_points();
 
+        disk_read_bytes += cur_positive_size;
+        let now = Instant::now();
         read_data(
             &mut f,
             &mut buf[..cur_positive_size],
@@ -188,11 +193,14 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
             data_req_msg.tot_channels,
         )
         .await?;
+        disk_read_elapsed_times += now.elapsed().as_nanos();
 
         if data_req_msg.use_negative {
             let blocks_per_channel = data_req_msg.negative_data_per_channel_length
                 / data_req_msg.negative_consencutive_points();
 
+            let now = Instant::now();
+            disk_read_bytes += cur_positive_size;
             read_data(
                 &mut f,
                 &mut buf[cur_positive_size..(cur_positive_size + cur_negative_size)],
@@ -203,6 +211,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
                 data_req_msg.tot_channels,
             )
             .await?;
+            disk_read_elapsed_times += now.elapsed().as_nanos();
         }
 
         let resp_meta = DataMetaResp {
@@ -246,7 +255,17 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     socket.write_all(&resp_json_bytes).await?;
     socket.flush().await?; // this is important?
 
-    tracing::info!("FileReq:{:?}. Send Done.", file_req_msg);
+    let disk_read_elapsed_times = (disk_read_elapsed_times / 1_000_000) as f64 / 1000.0;
+
+    tracing::info!(
+        "FileReq:{:?}. Send Done. File Read Speed: {:.4}GB/s",
+        file_req_msg,
+        if disk_read_elapsed_times < 1e-6 {
+            0.0
+        } else {
+            disk_read_bytes as f64 / disk_read_elapsed_times / 1024.0 / 1024.0 / 1024.0
+        }
+    );
 
     Ok(())
 }
@@ -261,7 +280,6 @@ async fn read_data(
     tot_channels: usize,
 ) -> anyhow::Result<()> {
     let stride = tot_channels * channel_consecutive_points;
-
     let points_per_channel = blocks_per_channel * channel_consecutive_points;
     for block_idx in 0..blocks_per_channel {
         let block_shift = block_idx * channel_consecutive_points;
@@ -279,6 +297,7 @@ async fn read_data(
         }
         data_start += stride;
     }
+
     Ok(())
 }
 
