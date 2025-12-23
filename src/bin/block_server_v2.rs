@@ -258,7 +258,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let disk_read_elapsed_times = (disk_read_elapsed_times / 1_000_000) as f64 / 1000.0;
 
     tracing::info!(
-        "FileReq:{:?}. Send Done. File Read Speed: {:.4}GB/s",
+        "FileReq:{:?}. Send Done. File Read Speed: {:.4}GiB/s",
         file_req_msg,
         if disk_read_elapsed_times < 1e-6 {
             0.0

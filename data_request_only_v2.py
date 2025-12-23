@@ -16,7 +16,7 @@ def read_exact(sock: socket.socket, n: int) -> bytes:
 
 
 def tcp_client():
-
+   
     # 创建 TCP socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -33,7 +33,7 @@ def tcp_client():
 
         # client send file request to block_server
         req_data = {
-            "FP": "/data1/raw-signal-data/20251211_240601Y0088_Run0011_07_pk0001.data"
+            "FP": "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin-2"
         }
         req_bytes = json.dumps(req_data).encode("utf-8")
         bytes_len = len(req_bytes)
@@ -45,15 +45,14 @@ def tcp_client():
         meta_len = int.from_bytes(meta_len_bytes, byteorder="little")
         print(f"meta_len:{meta_len}")
         meta_info = read_exact(client_socket, meta_len)
-        
-        print("meta_str:'{}'".format(meta_info.decode("utf-8")))
         meta_info = json.loads(meta_info.decode("utf-8"))
 
         # client send data request to block_server
+        c_start = 1
         data_req = {
-            "CS": 5,  # channel start。请求的 channel 起始
+            "CS": c_start,  # channel start。请求的 channel 起始
             "CE": meta_info["numChannels"],  # channel end。请求的 channel 结束。
-            "B": 257,  # batch size, 文件服务一次性 返回多少 channel 的数据
+            "B": 1,  # batch size, 文件服务一次性 返回多少 channel 的数据
             # positive data start. 对应 posDataStart
             "PDS": meta_info["posDataStart"],
             # negative data start. 对应 negDataStart
@@ -75,7 +74,7 @@ def tcp_client():
         client_socket.sendall(data_req_bytes)
 
         # reciever the channel raw signal data from block_server
-        channel_cursor = 0
+        channel_cursor = c_start
         print("start receving data")
         while True:
             meta_len_bytes = read_exact(client_socket, 4)
@@ -91,20 +90,31 @@ def tcp_client():
             negative_data_lenth = meta_info["NDL"]  # 仅对于 UN is True 时生效
             num_channels = meta_info["NC"]
             positive_data = read_exact(client_socket, positive_data_length)
-            
             # print(positive_data[:100])
 
-            positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
-                [num_channels, -1]
-            )
-            # print(positive_data[])
-            break
+            # positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
+            #     [num_channels, -1]
+            # )
 
+            # print(positive_data)
+            
+            # print(positive_data
+            #       == data_pos[channel_cursor: (channel_cursor + num_channels), :]
+            #       )
+
+            # assert (
+            #     positive_data
+            #     == data_pos[channel_cursor: (channel_cursor + num_channels), :]
+            # ).all(), f"pos assert error"
+            
             negative_data = read_exact(client_socket, negative_data_lenth)
             # negative_data = np.array(list(negative_data), dtype=np.uint8).reshape(
             #     [num_channels, -1]
             # )
-
+            # assert (
+            #     negative_data
+            #     == data_neg[channel_cursor: (channel_cursor + num_channels), :]
+            # ).all(), "neg assert error"
             print("check ok")
 
             channel_cursor += meta_info["NC"]
