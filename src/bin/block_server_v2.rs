@@ -338,6 +338,7 @@ async fn read_data(
 }
 
 async fn block_server(retry_times: Arc<AtomicU8>, app_status: Arc<AtomicBool>) {
+    let sleep_secs = 2;
     loop {
         match data_msg_listener(retry_times.clone(), app_status.clone()).await {
             Ok(_) => {}
@@ -347,8 +348,11 @@ async fn block_server(retry_times: Arc<AtomicU8>, app_status: Arc<AtomicBool>) {
                 app_status.store(false, std::sync::atomic::Ordering::SeqCst);
             }
         }
-
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tracing::warn!(
+            "data msg listener exited. sleep {}secs and then retry",
+            sleep_secs
+        );
+        tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
 
         if retry_times.load(std::sync::atomic::Ordering::SeqCst) > 100 {
             tracing::error!("retry error. break now");
@@ -431,8 +435,12 @@ fn main() -> io::Result<()> {
     let mqtt_pwd = cli.mqtt_password.clone();
 
     rt.block_on(async move {
-        tokio::join!(
-            block_server(retry_times.clone(), app_status.clone()),
+        let app_status_ = app_status.clone();
+        let block_server_handle = tokio::spawn(async move {
+            block_server(retry_times.clone(), app_status_.clone()).await;
+        });
+
+        tokio::spawn(async move {
             mqtt_last_will::mqtt_last_will_task(
                 app_status.clone(),
                 mqtt_addr.as_str(),
@@ -440,9 +448,12 @@ fn main() -> io::Result<()> {
                 mqtt_software_name.as_str(),
                 mqtt_client_id.as_str(),
                 mqtt_username.as_str(),
-                mqtt_pwd.as_str()
+                mqtt_pwd.as_str(),
             )
-        )
+            .await
+        });
+
+        block_server_handle.await.unwrap();
     });
     Ok(())
 }

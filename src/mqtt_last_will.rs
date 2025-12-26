@@ -32,9 +32,14 @@ pub async fn mqtt_last_will_task(
         .set_keep_alive(Duration::from_secs(15))
         .set_credentials(username, password);
 
+    let mut sleep_secs = 1;
+
     loop {
         if !alive_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            tracing::info!("wait task_server online. sleep {}secs", sleep_secs);
+            tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+            sleep_secs *= 2;
+            sleep_secs = sleep_secs.min(120);
             continue;
         }
 
@@ -102,17 +107,26 @@ pub async fn mqtt_last_will_task(
                 tracing::info!("connected to mqtt");
             }
             Err(e) => {
-                tracing::error!("publish to mqtt error. {}", e);
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                tracing::error!(
+                    "publish to mqtt error. {}. sleep {}secs and then retry",
+                    e,
+                    sleep_secs
+                );
+                tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+                sleep_secs *= 2;
+                sleep_secs = sleep_secs.min(120);
                 continue;
             }
         };
+
+        sleep_secs = 1;
 
         // ===============================
         // 5. 正常运行事件循环
         // ===============================
         loop {
             if !alive_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                tracing::warn!("block server offline. break mqtt eventloop");
                 break;
             }
 
