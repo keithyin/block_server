@@ -454,6 +454,7 @@ fn main() -> io::Result<()> {
         });
 
         block_server_handle.await.unwrap();
+        std::process::abort();
     });
     Ok(())
 }

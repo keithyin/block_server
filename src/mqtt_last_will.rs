@@ -138,6 +138,8 @@ pub async fn mqtt_last_will_task(
                     break;
                 }
             }
+
+            // client.disconnect().await.unwrap();
         }
     }
 }
