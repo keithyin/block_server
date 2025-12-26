@@ -98,7 +98,9 @@ pub async fn mqtt_last_will_task(
             )
             .await
         {
-            Ok(_) => {}
+            Ok(_) => {
+                tracing::info!("connected to mqtt");
+            }
             Err(e) => {
                 tracing::error!("publish to mqtt error. {}", e);
                 tokio::time::sleep(Duration::from_secs(2)).await;
