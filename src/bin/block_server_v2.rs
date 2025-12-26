@@ -1,13 +1,20 @@
 use std::{
     io,
-    sync::{Arc, Mutex, OnceLock, atomic::AtomicU8},
+    str::FromStr,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU8},
+    },
     time::{Duration, Instant, UNIX_EPOCH},
 };
 
 use anyhow::Context;
-use block_server::net::{
-    extract_meta_info,
-    protocol::{ClientDataReq, ClientFpReq, DataMetaResp},
+use block_server::{
+    mqtt_last_will,
+    net::{
+        extract_meta_info,
+        protocol::{ClientDataReq, ClientFpReq, DataMetaResp},
+    },
 };
 use tokio::{
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter},
@@ -19,8 +26,6 @@ use clap::{self, Parser};
 use num_cpus;
 use tracing::info_span;
 
-static SERVED_FILES: OnceLock<Arc<Mutex<Vec<String>>>> = OnceLock::new();
-
 #[derive(Debug, Parser, Clone)]
 #[command(version, about, long_about=None)]
 struct Cli {
@@ -31,10 +36,24 @@ struct Cli {
         long = "cpus",
         help = "cpus. 0-3,5-6  . 0-3 means 0,1,2,3 (4cpus). default: use all cpus"
     )]
-    cpus: Option<String>,
+    pub cpus: Option<String>,
 
-    #[arg(long = "db", help = "path to the database file. ???.db")]
-    db_path: Option<String>,
+    #[arg(long="mqttAddr", default_value_t=String::from_str("127.0.0.1").unwrap())]
+    pub mqtt_addr: String,
+
+    #[arg(long = "mqttPort", default_value_t = 1883)]
+    pub mqtt_port: u16,
+
+    #[arg(long="mqttUsername", default_value_t=String::from_str("software").unwrap())]
+    pub mqtt_username: String,
+    #[arg(long="mqttPwd", default_value_t=String::from_str("123456").unwrap())]
+    pub mqtt_password: String,
+
+    #[arg(long="mqttSoftwareName", default_value_t=String::from_str("block_server").unwrap())]
+    pub mqtt_software_name: String,
+
+    #[arg(long="mqttClientId", default_value_t=String::from_str("cid06").unwrap())]
+    pub mqtt_client_id: String,
 }
 
 impl Cli {
@@ -69,10 +88,15 @@ impl Cli {
     }
 }
 
-async fn data_msg_listener(retry_times: Arc<AtomicU8>) -> anyhow::Result<()> {
+async fn data_msg_listener(
+    retry_times: Arc<AtomicU8>,
+    app_status: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
     let listener = TcpListener::bind("0.0.0.0:30002").await?;
     tracing::info!("data msg processor listening on 0.0.0.0:30002");
     retry_times.store(0, std::sync::atomic::Ordering::SeqCst);
+    app_status.store(true, std::sync::atomic::Ordering::SeqCst);
+
     loop {
         match listener.accept().await {
             Ok((socket, socker_addr)) => {
@@ -90,7 +114,7 @@ async fn data_msg_listener(retry_times: Arc<AtomicU8>) -> anyhow::Result<()> {
                 });
             }
             Err(e) => {
-                eprintln!("Failed to accept connection: {}", e);
+                tracing::error!("Failed to accept connection: {}", e);
             }
         }
     }
@@ -99,7 +123,8 @@ async fn data_msg_listener(retry_times: Arc<AtomicU8>) -> anyhow::Result<()> {
 async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let file_req_msg = extract_meta_info::<ClientFpReq>(&mut socket).await?;
 
-    let info_span = info_span!("DataMsgProcessor", %file_req_msg.filepath);
+    let fpath = &file_req_msg.filepath;
+    let info_span = info_span!("DataMsgProcessor", %fpath);
     let _guard = info_span.enter();
 
     tracing::info!("FileReq:{:?}", file_req_msg);
@@ -138,7 +163,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         "FileMeta:{:?}",
         String::from_utf8(file_meta_bytes.clone()).map(|v| v.replace("\"", ""))
     );
-    
+
     socket
         .write_all(&file_meta_bytes)
         .await
@@ -146,12 +171,16 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     tracing::info!("write file meta bytes DONE");
 
     let data_req_msg = extract_meta_info::<ClientDataReq>(&mut socket).await?;
-    tracing::info!("DataReq: {:?}", data_req_msg);
 
     let channel_end = data_req_msg.channel_end;
     let pos_data_start = data_req_msg.get_pos_data_start();
     let neg_data_start = data_req_msg.get_neg_data_start();
     let mut channel_start = data_req_msg.channel_start;
+
+    let info_span2 = info_span!("DataReq",  %channel_start, %channel_end);
+    let _guard2 = info_span2.enter();
+    tracing::info!("{}, Start send data", data_req_msg);
+
     let buf_size = data_req_msg.batch_size
         * (data_req_msg.positive_data_per_channel_length
             + if data_req_msg.use_negative {
@@ -266,8 +295,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let disk_read_elapsed_times = (disk_read_elapsed_times / 1_000_000) as f64 / 1000.0;
 
     tracing::info!(
-        "FileReq:{:?}. Send Done. File Read Speed: {:.4}GiB/s",
-        file_req_msg,
+        "Send Done. File Read Speed: {:.4}GiB/s",
         if disk_read_elapsed_times < 1e-6 {
             0.0
         } else {
@@ -309,7 +337,35 @@ async fn read_data(
     Ok(())
 }
 
+async fn block_server(retry_times: Arc<AtomicU8>, app_status: Arc<AtomicBool>) {
+    loop {
+        match data_msg_listener(retry_times.clone(), app_status.clone()).await {
+            Ok(_) => {}
+            Err(err) => {
+                tracing::error!("try: {:?}, err: {}", retry_times, err);
+                retry_times.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                app_status.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        if retry_times.load(std::sync::atomic::Ordering::SeqCst) > 100 {
+            tracing::error!("retry error. break now");
+            break;
+        }
+    }
+}
+
 fn main() -> io::Result<()> {
+    let time_fmt = time::format_description::parse(
+        "[year]-[month padding:zero]-[day padding:zero] [hour]:[minute]:[second]",
+    )
+    .unwrap();
+    let time_offset =
+        time::UtcOffset::current_local_offset().unwrap_or_else(|_| time::UtcOffset::UTC);
+    let timer = tracing_subscriber::fmt::time::OffsetTime::new(time_offset, time_fmt);
+
     let cli = Cli::parse();
     let used_cpus = cli.cpus();
     let now = std::time::SystemTime::now();
@@ -331,18 +387,20 @@ fn main() -> io::Result<()> {
         tracing_subscriber::fmt::fmt()
             .with_ansi(false)
             .with_writer(non_blocking)
+            .with_timer(timer)
             .init();
         Some(_guard)
     } else {
-        tracing_subscriber::fmt::fmt().with_ansi(false).init();
+        tracing_subscriber::fmt::fmt()
+            .with_ansi(false)
+            .with_timer(timer)
+            .init();
         None
     };
 
     assert!(used_cpus.len() >= 3, "at least 3 threads");
     tracing::info!("num_cpus: {}", used_cpus.len());
     tracing::info!("cpu_ids: {:?}", used_cpus);
-
-    SERVED_FILES.set(Arc::new(Mutex::new(Vec::new()))).unwrap();
 
     let non_blocking_threads = 1;
     // file io binding cpu, not ready yet
@@ -362,23 +420,29 @@ fn main() -> io::Result<()> {
         .enable_time()
         .build()?;
 
-    rt.block_on(async move {
-        let retry_times = Arc::new(AtomicU8::new(0));
-        loop {
-            match data_msg_listener(retry_times.clone()).await {
-                Ok(_) => {}
-                Err(err) => {
-                    tracing::error!("try: {:?}, err: {}", retry_times, err);
-                    retry_times.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                }
-            }
-            std::thread::sleep(Duration::from_secs(30));
+    let app_status = Arc::new(AtomicBool::new(false));
+    let retry_times = Arc::new(AtomicU8::new(0));
 
-            if retry_times.load(std::sync::atomic::Ordering::SeqCst) > 20 {
-                tracing::error!("retry error. break now");
-                break;
-            }
-        }
+    let mqtt_addr = cli.mqtt_addr.clone();
+    let mqtt_port = cli.mqtt_port;
+    let mqtt_software_name = cli.mqtt_software_name.clone();
+    let mqtt_client_id = cli.mqtt_client_id.clone();
+    let mqtt_username = cli.mqtt_username.clone();
+    let mqtt_pwd = cli.mqtt_password.clone();
+
+    rt.block_on(async move {
+        tokio::join!(
+            block_server(retry_times.clone(), app_status.clone()),
+            mqtt_last_will::mqtt_last_will_task(
+                app_status.clone(),
+                mqtt_addr.as_str(),
+                mqtt_port,
+                mqtt_software_name.as_str(),
+                mqtt_client_id.as_str(),
+                mqtt_username.as_str(),
+                mqtt_pwd.as_str()
+            )
+        )
     });
     Ok(())
 }

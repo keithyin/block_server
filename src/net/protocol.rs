@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct ClientFpReq {
     #[serde(rename = "FP")]
@@ -58,6 +60,12 @@ impl ClientDataReq {
 
     pub fn get_neg_data_start(&self) -> usize {
         self.negative_data_start
+    }
+}
+
+impl Display for ClientDataReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
