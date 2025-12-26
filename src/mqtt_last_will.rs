@@ -42,9 +42,17 @@ pub async fn mqtt_last_will_task(
         // 2. 定义遗嘱（LWT）
         // ===============================
         let will_payload = json!({
-            "status": "offline",
-            "reason": "unexpected_disconnect",
-            "ts": chrono::Utc::now().timestamp()
+             "id": 1,
+            "version": 1.0,
+            "type": "status",
+            "params": {
+                "status": "offline",
+                "reason": "unexpected_disconnect",
+                "name": software_name,
+                "id": client_id,
+                "ts": chrono::Utc::now().timestamp()
+            }
+
         })
         .to_string();
 
@@ -68,9 +76,16 @@ pub async fn mqtt_last_will_task(
         // 4. 服务“上线”主动声明 online
         // ===============================
         let online_payload = json!({
-            "status": "online",
-            "pid": std::process::id(),
-            "ts": chrono::Utc::now().timestamp()
+            "id": 1,
+            "version": 1.0,
+            "type": "status",
+            "params": {
+                "status": "online",
+                "name": software_name,
+                "id": client_id,
+                "pid": std::process::id(),
+                "ts": chrono::Utc::now().timestamp()
+            }
         })
         .to_string();
 
@@ -86,7 +101,8 @@ pub async fn mqtt_last_will_task(
             Ok(_) => {}
             Err(e) => {
                 tracing::error!("publish to mqtt error. {}", e);
-                break;
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                continue;
             }
         };
 
