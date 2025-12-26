@@ -127,6 +127,16 @@ pub async fn mqtt_last_will_task(
         loop {
             if !alive_flag.load(std::sync::atomic::Ordering::SeqCst) {
                 tracing::warn!("block server offline. break mqtt eventloop");
+
+                let _ = client
+                    .publish(
+                        topic,
+                        QoS::AtLeastOnce,
+                        true, // retain
+                        will_payload.clone(),
+                    )
+                    .await;
+
                 break;
             }
 
