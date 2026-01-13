@@ -55,7 +55,7 @@ pub async fn mqtt_last_will_task(
                 "reason": "unexpected_disconnect",
                 "name": software_name,
                 "id": client_id,
-                "ts": chrono::Utc::now().timestamp()
+                "timestamp": chrono::Utc::now().timestamp()
             }
 
         })
@@ -89,7 +89,7 @@ pub async fn mqtt_last_will_task(
                 "name": software_name,
                 "id": client_id,
                 "pid": std::process::id(),
-                "ts": chrono::Utc::now().timestamp()
+                "timestamp": chrono::Utc::now().timestamp()
             }
         })
         .to_string();
