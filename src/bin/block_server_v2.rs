@@ -1,11 +1,11 @@
 use std::{
-    io,
+    fs, io,
     str::FromStr,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU8},
     },
-    time::{Duration, Instant, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Context;
@@ -374,21 +374,22 @@ fn main() -> io::Result<()> {
 
     let cli = Cli::parse();
     let used_cpus = cli.cpus();
-    let now = std::time::SystemTime::now();
 
     let log_dir = cli
         .get_log_dir()
         .map(|dir_path| std::path::Path::new(dir_path));
-    let file_name = log_dir.map(|v| {
-        v.join(format!(
-            "block_server_v2.tt-{}.log",
-            now.duration_since(UNIX_EPOCH).unwrap().as_millis()
-        ))
-    });
 
-    let log_file = file_name.map(|fname| std::fs::File::create(fname).unwrap());
+    if let Some(dir) = log_dir.as_deref() {
+        cleanup_old_logs(dir, 15);
+    }
 
-    let _guard = if let Some(file) = log_file {
+    let file_appender = if let Some(dir) = log_dir {
+        Some(tracing_appender::rolling::daily(dir, "block_server_v2.log"))
+    } else {
+        None
+    };
+
+    let _guard = if let Some(file) = file_appender {
         let (non_blocking, _guard) = tracing_appender::non_blocking(file);
         tracing_subscriber::fmt::fmt()
             .with_ansi(false)
@@ -459,4 +460,34 @@ fn main() -> io::Result<()> {
         std::process::abort();
     });
     Ok(())
+}
+
+fn cleanup_old_logs(log_dir: &std::path::Path, keep_days: u64) {
+    let now = SystemTime::now();
+    let max_age = Duration::from_secs(keep_days * 24 * 3600);
+
+    if let Ok(entries) = fs::read_dir(log_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+
+            if !path.is_file() {
+                continue;
+            }
+
+            // 只清理你的日志
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if !name.starts_with("block_server_v2.log.") {
+                    continue;
+                }
+            }
+
+            if let Ok(meta) = fs::metadata(&path) {
+                if let Ok(modified) = meta.modified() {
+                    if now.duration_since(modified).unwrap_or_default() > max_age {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+    }
 }
