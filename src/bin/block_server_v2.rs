@@ -124,7 +124,9 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let file_req_msg = extract_meta_info::<ClientFpReq>(&mut socket).await?;
 
     let fpath = &file_req_msg.filepath;
-    let info_span = info_span!("DataMsgProcessor", %fpath);
+    let fpath_p = std::path::Path::new(fpath);
+    let fname = fpath_p.file_name().unwrap().to_str().unwrap();
+    let info_span = info_span!("DataMsgProc", %fname);
     let _guard = info_span.enter();
 
     tracing::info!("FileReq:{:?}", file_req_msg);
@@ -177,7 +179,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let neg_data_start = data_req_msg.get_neg_data_start();
     let mut channel_start = data_req_msg.channel_start;
 
-    let info_span2 = info_span!("DataReq",  %channel_start, %channel_end);
+    let info_span2 = info_span!("DataReq",  c_s=%channel_start, c_e=%channel_end);
     let _guard2 = info_span2.enter();
     tracing::info!("{}, Start send data", data_req_msg);
 

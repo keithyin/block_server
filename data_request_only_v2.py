@@ -1,6 +1,5 @@
 import socket
 import json
-import h5py
 import numpy as np
 
 
@@ -21,7 +20,7 @@ def tcp_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # 服务器地址和端口
-    server_host = "127.0.0.1"
+    server_host = "192.168.3.55"
     # server_host = '127.0.0.1'  # 本地回环地址
     server_port = 30002
 
