@@ -5,7 +5,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, AtomicU8},
     },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime},
 };
 
 use anyhow::Context;
@@ -24,7 +24,6 @@ use tokio::{
 use affinity;
 use clap::{self, Parser};
 use num_cpus;
-use tracing::info_span;
 
 #[derive(Debug, Parser, Clone)]
 #[command(version, about, long_about=None)]
@@ -122,25 +121,42 @@ async fn data_msg_listener(
 
 async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let file_req_msg = extract_meta_info::<ClientFpReq>(&mut socket).await?;
-
     let fpath = &file_req_msg.filepath;
     let fpath_p = std::path::Path::new(fpath);
     let fname = fpath_p.file_name().unwrap().to_str().unwrap();
-    let info_span = info_span!("DataMsgProc", %fname);
-    let _guard = info_span.enter();
+    send_file_data(file_req_msg.clone(), fname, socket).await
+}
 
+#[tracing::instrument(name = "SendData", skip(file_req_msg, socket))]
+async fn send_file_data(
+    file_req_msg: ClientFpReq,
+    fname: &str,
+    mut socket: TcpStream,
+) -> anyhow::Result<()> {
     tracing::info!("FileReq:{:?}", file_req_msg);
 
     let mut f = tokio::fs::File::open(&file_req_msg.filepath)
         .await
         .context(format!("Failed to open file {}", &file_req_msg.filepath))?;
 
+    send_meta_info(&mut f, &file_req_msg, &mut socket).await?;
+
+    let data_req_msg = extract_meta_info::<ClientDataReq>(&mut socket).await?;
+
+    send_voltage_data(&data_req_msg, socket, &mut f).await
+}
+
+async fn send_meta_info(
+    f: &mut tokio::fs::File,
+    file_req_msg: &ClientFpReq,
+    socket: &mut TcpStream,
+) -> anyhow::Result<()> {
     let mut file_meta_start_pos_bytes = [0_u8; 8];
     f.read_exact(&mut file_meta_start_pos_bytes)
         .await
         .context(format!(
             "read meta start pos bytes error, {}",
-            &file_req_msg.filepath
+            file_req_msg.filepath
         ))?;
 
     let file_meta_start_pos = u64::from_le_bytes(file_meta_start_pos_bytes);
@@ -171,16 +187,20 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         .await
         .context("write file meta bytes error")?;
     tracing::info!("write file meta bytes DONE");
+    Ok(())
+}
 
-    let data_req_msg = extract_meta_info::<ClientDataReq>(&mut socket).await?;
-
+#[tracing::instrument(name="SendVolData", skip(data_req_msg, socket, f), fields(c_s=%data_req_msg.channel_start, c_e=%data_req_msg.channel_end))]
+async fn send_voltage_data(
+    data_req_msg: &ClientDataReq,
+    socket: TcpStream,
+    f: &mut tokio::fs::File,
+) -> anyhow::Result<()> {
     let channel_end = data_req_msg.channel_end;
     let pos_data_start = data_req_msg.get_pos_data_start();
     let neg_data_start = data_req_msg.get_neg_data_start();
     let mut channel_start = data_req_msg.channel_start;
 
-    let info_span2 = info_span!("DataReq",  c_s=%channel_start, c_e=%channel_end);
-    let _guard2 = info_span2.enter();
     tracing::info!("{}, Start send data", data_req_msg);
 
     let buf_size = data_req_msg.batch_size
@@ -223,7 +243,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
         disk_read_bytes += cur_positive_size;
         let now = Instant::now();
         read_data(
-            &mut f,
+            f,
             &mut buf[..cur_positive_size],
             cur_pos_data_start,
             cur_batch_size,
@@ -241,7 +261,7 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
             let now = Instant::now();
             disk_read_bytes += cur_positive_size;
             read_data(
-                &mut f,
+                f,
                 &mut buf[cur_positive_size..(cur_positive_size + cur_negative_size)],
                 cur_neg_data_start,
                 cur_batch_size,

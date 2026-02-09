@@ -1,6 +1,5 @@
 pub mod file;
 pub mod net;
-pub mod db;
 pub mod mqtt_last_will;
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

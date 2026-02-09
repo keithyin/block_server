@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(serde::Deserialize, serde::Serialize, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct ClientFpReq {
     #[serde(rename = "FP")]
     pub filepath: String,

@@ -14,14 +14,14 @@ def read_exact(sock: socket.socket, n: int) -> bytes:
     return buf
 
 
-def tcp_client():
-   
+def tcp_yield_data(server_host, filepath):
+
     # 创建 TCP socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # 服务器地址和端口
     # server_host = "192.168.3.55"
-    server_host = '127.0.0.1'  # 本地回环地址
+    # server_host = '127.0.0.1'  # 本地回环地址
     server_port = 30002
 
     try:
@@ -32,7 +32,7 @@ def tcp_client():
 
         # client send file request to block_server
         req_data = {
-            "FP": "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin-2"
+            "FP": filepath
         }
         req_bytes = json.dumps(req_data).encode("utf-8")
         bytes_len = len(req_bytes)
@@ -62,7 +62,7 @@ def tcp_client():
             "NDCL": meta_info[
                 "negChannelPoints"
             ],  # 单channel的负向电流点数，对应 posChannelPoints
-            "UN": True,  # use negative data. 如果为 True, 则返回 负向电流数据，否则不返回
+            "UN": False,  # use negative data. 如果为 True, 则返回 负向电流数据，否则不返回
             "TC": meta_info["numChannels"],
             "PCP": meta_info["posConsecutivePoints"],
             "NCP": meta_info["negConsecutivePoints"]
@@ -86,34 +86,8 @@ def tcp_client():
                 print("read done")
                 break
             positive_data_length = meta_info["PDL"]
-            negative_data_lenth = meta_info["NDL"]  # 仅对于 UN is True 时生效
-            num_channels = meta_info["NC"]
             positive_data = read_exact(client_socket, positive_data_length)
-            # print(positive_data[:100])
-
-            # positive_data = np.array(list(positive_data), dtype=np.uint8).reshape(
-            #     [num_channels, -1]
-            # )
-
-            # print(positive_data)
-            
-            # print(positive_data
-            #       == data_pos[channel_cursor: (channel_cursor + num_channels), :]
-            #       )
-
-            # assert (
-            #     positive_data
-            #     == data_pos[channel_cursor: (channel_cursor + num_channels), :]
-            # ).all(), f"pos assert error"
-            
-            negative_data = read_exact(client_socket, negative_data_lenth)
-            # negative_data = np.array(list(negative_data), dtype=np.uint8).reshape(
-            #     [num_channels, -1]
-            # )
-            # assert (
-            #     negative_data
-            #     == data_neg[channel_cursor: (channel_cursor + num_channels), :]
-            # ).all(), "neg assert error"
+            yield positive_data
             print("check ok")
 
             channel_cursor += meta_info["NC"]
@@ -130,4 +104,17 @@ def tcp_client():
 
 
 if __name__ == "__main__":
-    tcp_client()
+    ip1 = "192.168.3.55"
+    ip2 = "127.0.0.1"
+
+    fpath = "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin-2"
+
+    iter1 = tcp_yield_data(ip1, fpath)
+    iter2 = tcp_yield_data(ip2, fpath)
+
+    while True:
+        data1 = next(iter1)
+        data2 = next(iter2)
+
+        if data1 != data2:
+            raise ValueError("not equal")

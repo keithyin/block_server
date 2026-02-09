@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use rumqttc::{AsyncClient, Event, LastWill, MqttOptions, QoS};
+use rumqttc::{AsyncClient, Event, Incoming, LastWill, MqttOptions, QoS};
 use serde_json::json;
 
 pub async fn mqtt_last_will_task(
@@ -77,6 +77,31 @@ pub async fn mqtt_last_will_task(
 
         let (client, mut eventloop) = AsyncClient::new(mqttoptions.clone(), 10);
 
+        loop {
+            match eventloop.poll().await {
+                Ok(Event::Incoming(Incoming::ConnAck(ack))) => {
+                    tracing::info!("MQTT connected: {:?}", ack);
+                    // 这里就是“已连接”
+                    break;
+                }
+
+                Ok(Event::Incoming(_)) => {}
+
+                Ok(Event::Outgoing(_)) => {}
+
+                Err(e) => {
+                    tracing::warn!(
+                        "mqtt connection error: {:?}. sleep {}secs and then re-connected",
+                        e,
+                        sleep_secs
+                    );
+                    sleep_secs *= 2;
+                    sleep_secs = sleep_secs.min(120);
+                    tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+                }
+            }
+        }
+
         // ===============================
         // 4. 服务“上线”主动声明 online
         // ===============================
@@ -94,7 +119,7 @@ pub async fn mqtt_last_will_task(
         })
         .to_string();
 
-        match client
+        if let Err(e) = client
             .publish(
                 topic,
                 QoS::AtLeastOnce,
@@ -103,21 +128,8 @@ pub async fn mqtt_last_will_task(
             )
             .await
         {
-            Ok(_) => {
-                tracing::info!("connected to mqtt");
-            }
-            Err(e) => {
-                tracing::error!(
-                    "publish to mqtt error. {}. sleep {}secs and then retry",
-                    e,
-                    sleep_secs
-                );
-                tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
-                sleep_secs *= 2;
-                sleep_secs = sleep_secs.min(120);
-                continue;
-            }
-        };
+            tracing::error!("publish online msg to mqtt error. {}.", e);
+        }
 
         sleep_secs = 1;
 
@@ -128,14 +140,17 @@ pub async fn mqtt_last_will_task(
             if !alive_flag.load(std::sync::atomic::Ordering::SeqCst) {
                 tracing::warn!("block server offline. break mqtt eventloop");
 
-                let _ = client
+                if let Err(e) = client
                     .publish(
                         topic,
                         QoS::AtLeastOnce,
                         true, // retain
                         will_payload.clone(),
                     )
-                    .await;
+                    .await
+                {
+                    tracing::error!("publish last will to mqtt error. {}.", e);
+                }
 
                 break;
             }

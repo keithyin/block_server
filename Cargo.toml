@@ -1,6 +1,6 @@
 [package]
 name = "block_server"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2024"
 description = "block server"
 license = "MIT"
@@ -25,7 +25,6 @@ tracing-appender = "0.2"
 affinity = "0.1"
 clap = { version = "4", features = ["derive"] }
 num_cpus = "1"
-turso = "0.3"
 rumqttc = "0.25.1"
 time = "0.3.34"
 chrono = "0.4"
