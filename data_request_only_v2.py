@@ -116,6 +116,8 @@ def tcp_client():
             #     == data_neg[channel_cursor: (channel_cursor + num_channels), :]
             # ).all(), "neg assert error"
             print("check ok")
+            
+            client_socket.send(b'0')
 
             channel_cursor += meta_info["NC"]
             # do something
