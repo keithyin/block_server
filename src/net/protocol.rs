@@ -33,6 +33,9 @@ pub struct ClientDataReq {
 
     #[serde(rename = "NCP")]
     pub negative_consencutive_points: Option<usize>,
+
+    #[serde(rename = "EBP")]
+    pub enable_back_pressure: Option<usize>
 }
 
 impl ClientDataReq {

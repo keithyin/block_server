@@ -124,7 +124,9 @@ async fn data_msg_processor(mut socket: TcpStream) -> anyhow::Result<()> {
     let fpath = &file_req_msg.filepath;
     let fpath_p = std::path::Path::new(fpath);
     let fname = fpath_p.file_name().unwrap().to_str().unwrap();
-    send_file_data(file_req_msg.clone(), fname, socket).await
+    send_file_data(file_req_msg.clone(), fname, socket)
+        .await
+        .context(format!("filename: {}", fname))
 }
 
 #[tracing::instrument(name = "SendData", skip(file_req_msg, socket))]
@@ -143,7 +145,13 @@ async fn send_file_data(
 
     let data_req_msg = extract_meta_info::<ClientDataReq>(&mut socket).await?;
 
-    send_voltage_data(&data_req_msg, socket, &mut f).await
+    send_voltage_data(
+        &data_req_msg,
+        socket,
+        &mut f,
+        data_req_msg.enable_back_pressure.unwrap_or(0) == 1,
+    )
+    .await
 }
 
 async fn send_meta_info(
@@ -193,8 +201,9 @@ async fn send_meta_info(
 #[tracing::instrument(name="SendVolData", skip(data_req_msg, socket, f), fields(c_s=%data_req_msg.channel_start, c_e=%data_req_msg.channel_end))]
 async fn send_voltage_data(
     data_req_msg: &ClientDataReq,
-    socket: TcpStream,
+    mut socket: TcpStream,
     f: &mut tokio::fs::File,
+    enable_back_pressure: bool,
 ) -> anyhow::Result<()> {
     let channel_end = data_req_msg.channel_end;
     let pos_data_start = data_req_msg.get_pos_data_start();
@@ -213,10 +222,12 @@ async fn send_voltage_data(
 
     let mut buf: Vec<u8> = vec![0_u8; buf_size];
 
-    let mut socket = BufWriter::new(socket);
+    // let mut socket = BufWriter::new(socket);
 
     let mut disk_read_bytes = 0;
     let mut disk_read_elapsed_times = 0;
+
+    let mut client_ack = [0_u8; 1];
 
     loop {
         // read a batch data
@@ -294,6 +305,10 @@ async fn send_voltage_data(
             .await?;
 
         channel_start += cur_batch_size;
+
+        if enable_back_pressure {
+            socket.read_exact(&mut client_ack).await?; // this is for back pressure
+        }
 
         if channel_start >= channel_end {
             break;
@@ -456,7 +471,6 @@ fn main() -> io::Result<()> {
     let mqtt_client_id = cli.mqtt_client_id.clone();
     let mqtt_username = cli.mqtt_username.clone();
     let mqtt_pwd = cli.mqtt_password.clone();
-
     rt.block_on(async move {
         let app_status_ = app_status.clone();
         let block_server_handle = tokio::spawn(async move {
