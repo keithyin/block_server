@@ -37,6 +37,9 @@ struct Cli {
     )]
     pub cpus: Option<String>,
 
+    #[arg(long = "enableMqtt", default_value_t = 1)]
+    pub enable_mqtt: u8,
+
     #[arg(long="mqttAddr", default_value_t=String::from_str("127.0.0.1").unwrap())]
     pub mqtt_addr: String,
 
@@ -471,24 +474,27 @@ fn main() -> io::Result<()> {
     let mqtt_client_id = cli.mqtt_client_id.clone();
     let mqtt_username = cli.mqtt_username.clone();
     let mqtt_pwd = cli.mqtt_password.clone();
+    let enable_mqtt = cli.enable_mqtt == 1;
     rt.block_on(async move {
         let app_status_ = app_status.clone();
         let block_server_handle = tokio::spawn(async move {
             block_server(retry_times.clone(), app_status_.clone()).await;
         });
 
-        tokio::spawn(async move {
-            mqtt_last_will::mqtt_last_will_task(
-                app_status.clone(),
-                mqtt_addr.as_str(),
-                mqtt_port,
-                mqtt_software_name.as_str(),
-                mqtt_client_id.as_str(),
-                mqtt_username.as_str(),
-                mqtt_pwd.as_str(),
-            )
-            .await
-        });
+        if enable_mqtt {
+            tokio::spawn(async move {
+                mqtt_last_will::mqtt_last_will_task(
+                    app_status.clone(),
+                    mqtt_addr.as_str(),
+                    mqtt_port,
+                    mqtt_software_name.as_str(),
+                    mqtt_client_id.as_str(),
+                    mqtt_username.as_str(),
+                    mqtt_pwd.as_str(),
+                )
+                .await
+            });
+        }
 
         block_server_handle.await.unwrap();
         std::process::abort();

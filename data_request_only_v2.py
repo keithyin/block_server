@@ -20,8 +20,8 @@ def tcp_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # 服务器地址和端口
-    # server_host = "192.168.3.55"
-    server_host = '127.0.0.1'  # 本地回环地址
+    server_host = "192.168.3.55"
+    # server_host = '127.0.0.1'  # 本地回环地址
     server_port = 30002
 
     try:
@@ -65,7 +65,8 @@ def tcp_client():
             "UN": True,  # use negative data. 如果为 True, 则返回 负向电流数据，否则不返回
             "TC": meta_info["numChannels"],
             "PCP": meta_info["posConsecutivePoints"],
-            "NCP": meta_info["negConsecutivePoints"]
+            "NCP": meta_info["negConsecutivePoints"],
+            "EBP": 1
         }
         data_req_bytes = json.dumps(data_req).encode("utf-8")
         client_socket.sendall(
