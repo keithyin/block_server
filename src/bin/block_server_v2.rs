@@ -5,6 +5,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, AtomicU8},
     },
+    thread,
     time::{Duration, Instant, SystemTime},
 };
 
@@ -204,7 +205,7 @@ async fn send_meta_info(
 #[tracing::instrument(name="SendVolData", skip(data_req_msg, socket, f), fields(c_s=%data_req_msg.channel_start, c_e=%data_req_msg.channel_end))]
 async fn send_voltage_data(
     data_req_msg: &ClientDataReq,
-    mut socket: TcpStream,
+    socket: TcpStream,
     f: &mut tokio::fs::File,
     enable_back_pressure: bool,
 ) -> anyhow::Result<()> {
@@ -225,7 +226,7 @@ async fn send_voltage_data(
 
     let mut buf: Vec<u8> = vec![0_u8; buf_size];
 
-    // let mut socket = BufWriter::new(socket);
+    let mut socket = BufWriter::with_capacity(8 * 1024 * 1024, socket);
 
     let mut disk_read_bytes = 0;
     let mut disk_read_elapsed_times = 0;
@@ -308,6 +309,7 @@ async fn send_voltage_data(
             .await?;
 
         channel_start += cur_batch_size;
+        socket.flush().await?;
 
         if enable_back_pressure {
             socket.read_exact(&mut client_ack).await?; // this is for back pressure
@@ -418,7 +420,13 @@ fn main() -> io::Result<()> {
         .map(|dir_path| std::path::Path::new(dir_path));
 
     if let Some(dir) = log_dir.as_deref() {
-        cleanup_old_logs(dir, 15);
+        let dir_ = dir.to_owned();
+        thread::spawn(move || {
+            loop {
+                cleanup_old_logs(dir_.as_path(), 15);
+                thread::sleep(Duration::from_hours(24));
+            }
+        });
     }
 
     let file_appender = if let Some(dir) = log_dir {

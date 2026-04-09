@@ -105,9 +105,10 @@ def client_worker(server_host, server_port, file_path, process_id, result_queue)
 
 def main():
     # 配置参数
-    SERVER_HOST = "192.168.3.55"
+    SERVER_HOST = "192.168.3.62"
     SERVER_PORT = 30002
-    FILE_PATH = "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin-2"
+    # FILE_PATH = "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin-2"
+    FILE_PATH = "E:/temp/20260402_240601Y0008_Run0002_00_pk0014.data"
     NUM_PROCESSES = 10  # 可根据 CPU 核心数和网络条件调整
 
     result_queue = multiprocessing.Queue()
