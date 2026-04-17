@@ -330,7 +330,7 @@ async fn send_voltage_data(
         }
 
         idx += 1;
-        if idx % 50 == 0 {
+        if idx % 500 == 0 {
             log_speed(
                 disk_read_elapsed_times,
                 disk_read_bytes,
