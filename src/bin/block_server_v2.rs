@@ -231,8 +231,12 @@ async fn send_voltage_data(
     let mut disk_read_bytes = 0;
     let mut disk_read_elapsed_times = 0;
 
+    let mut send_bytes = 0;
+    let mut send_elapsed_times = 0;
+
     let mut client_ack = [0_u8; 1];
 
+    let mut idx = 0;
     loop {
         // read a batch data
         let cur_batch_size = (channel_end - channel_start).min(data_req_msg.batch_size);
@@ -298,12 +302,16 @@ async fn send_voltage_data(
         // tracing::info!("resp_json:{resp_json}");
         // tracing::info!("resp_json_bytes:{:?}", resp_json.as_bytes());
 
+        let send_now = Instant::now();
+        send_bytes += 4;
         socket
             .write_all(&((resp_json.as_bytes().len() as u32).to_le_bytes()))
             .await?;
 
+        send_bytes += resp_json.as_bytes().len();
         socket.write_all(resp_json.as_bytes()).await?;
 
+        send_bytes += cur_positive_size + cur_negative_size;
         socket
             .write_all(&buf[..(cur_positive_size + cur_negative_size)])
             .await?;
@@ -311,12 +319,25 @@ async fn send_voltage_data(
         channel_start += cur_batch_size;
         socket.flush().await?;
 
+        send_elapsed_times += send_now.elapsed().as_nanos();
+
         if enable_back_pressure {
             socket.read_exact(&mut client_ack).await?; // this is for back pressure
         }
 
         if channel_start >= channel_end {
             break;
+        }
+
+        idx += 1;
+        if idx % 50 == 0 {
+            log_speed(
+                disk_read_elapsed_times,
+                disk_read_bytes,
+                send_elapsed_times,
+                send_bytes,
+                "Sending...",
+            );
         }
     }
 
@@ -334,15 +355,12 @@ async fn send_voltage_data(
     socket.write_all(&resp_json_bytes).await?;
     socket.flush().await?; // this is important?
 
-    let disk_read_elapsed_times = (disk_read_elapsed_times / 1_000_000) as f64 / 1000.0;
-
-    tracing::info!(
-        "Send Done. File Read Speed: {:.4}GiB/s",
-        if disk_read_elapsed_times < 1e-6 {
-            0.0
-        } else {
-            disk_read_bytes as f64 / disk_read_elapsed_times / 1024.0 / 1024.0 / 1024.0
-        }
+    log_speed(
+        disk_read_elapsed_times,
+        disk_read_bytes,
+        send_elapsed_times,
+        send_bytes,
+        "Send Done.",
     );
 
     Ok(())
@@ -538,4 +556,30 @@ fn cleanup_old_logs(log_dir: &std::path::Path, keep_days: u64) {
             }
         }
     }
+}
+
+fn log_speed(
+    disk_read_elapsed_times: u128,
+    disk_read_bytes: usize,
+    send_elapsed_times: u128,
+    send_bytes: usize,
+    tag: &str,
+) {
+    let disk_read_elapsed_times = (disk_read_elapsed_times / 1_000_000) as f64 / 1000.0;
+    let send_elapsed_times = (send_elapsed_times / 1_000_000) as f64 / 1000.0;
+
+    tracing::info!(
+        "{} File Read Speed: {:.4}GiB/s. NIC Send Speed: {:.4}GiB/s",
+        tag,
+        if disk_read_elapsed_times < 1e-6 {
+            0.0
+        } else {
+            disk_read_bytes as f64 / disk_read_elapsed_times / 1024.0 / 1024.0 / 1024.0
+        },
+        if send_elapsed_times < 1e-6 {
+            0.0
+        } else {
+            send_bytes as f64 / send_elapsed_times / 1024.0 / 1024.0 / 1024.0
+        },
+    );
 }
