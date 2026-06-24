@@ -21,7 +21,7 @@ def tcp_client():
 
     # 服务器地址和端口
     # server_host = "192.168.3.55"
-    server_host = '127.0.0.1'  # 本地回环地址
+    server_host = '192.168.2.4'  # 本地回环地址
     server_port = 30002
 
     try:
@@ -32,7 +32,7 @@ def tcp_client():
 
         # client send file request to block_server
         req_data = {
-            "FP": "/data1/raw-signal-data/20250829_250302Y0003_Run0011_00_pk0001.bin-2"
+            "FP": "E:datas/20260129_250301Y0001_Run0001_00_pk0014.data"
         }
         req_bytes = json.dumps(req_data).encode("utf-8")
         bytes_len = len(req_bytes)

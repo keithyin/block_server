@@ -64,7 +64,7 @@ def tcp_client():
             "NDCL": meta_info[
                 "negChannelPoints"
             ],  # 单channel的负向电流点数，对应 posChannelPoints
-            "UN": True,  # use negative data. 如果为 True, 则返回 负向电流数据，否则不返回
+            "UN": False,  # use negative data. 如果为 True, 则返回 负向电流数据，否则不返回
         }
         data_req_bytes = json.dumps(data_req).encode("utf-8")
         client_socket.sendall(
